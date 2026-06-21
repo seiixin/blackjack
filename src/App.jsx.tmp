@@ -1,0 +1,877 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+
+import backgroundImage from '../assets/background.png';
+import gameboardBackground from '../assets/gameboard-background.png';
+import tableFront from '../assets/table-front.png';
+import tableLeft from '../assets/table-left.png';
+import tableRight from '../assets/table-right.png';
+import coinsBankImage from '../assets/character/coins.png';
+import coinTier500 from '../assets/character/500-coins.png';
+import coinTier15k from '../assets/character/15k-coins.png';
+import coinTier100k from '../assets/character/100k-coins.png';
+import coinTier500k from '../assets/character/500k-coins.png';
+import coinTier1m from '../assets/character/1m-coins.png';
+import standFront from '../assets/character/stand-front.png';
+import walkRight1 from '../assets/character/walk-ad-frame-1.png';
+import walkRight2 from '../assets/character/walk-ad-frame-2.png';
+import walkRight3 from '../assets/character/walk-ad-frame-3.png';
+import walkRight4 from '../assets/character/walk-ad-frame-4.png';
+import walkRight5 from '../assets/character/walk-ad-frame-5.png';
+import walkRight6 from '../assets/character/walk-ad-frame-6.png';
+import walkUp1 from '../assets/character/walk-w-frame-1.png';
+import walkUp2 from '../assets/character/walk-w-frame-2.png';
+import walkUp3 from '../assets/character/walk-w-frame-3.png';
+import walkUp4 from '../assets/character/walk-w-frame-4.png';
+import walkDown1 from '../assets/character/walk-s-frame-1.png';
+import walkDown2 from '../assets/character/walk-s-frame-2.png';
+import walkDown3 from '../assets/character/walk-s-frame-3.png';
+import walkDown4 from '../assets/character/walk-s-frame-4.png';
+
+function useSpriteFrames(frames, delay = 140) {
+  const [frameIndex, setFrameIndex] = useState(0);
+
+  useEffect(() => {
+    if (frames.length <= 1) return undefined;
+
+    const timer = window.setInterval(() => {
+      setFrameIndex((currentIndex) => (currentIndex + 1) % frames.length);
+    }, delay);
+
+    return () => window.clearInterval(timer);
+  }, [delay, frames]);
+
+  return frames[frameIndex];
+}
+
+const bounds = {
+  x: { min: 8, max: 92 },
+  y: { min: 24, max: 96 },
+};
+
+const tableZones = {
+  easy: { x: 18, y: 62, radius: 10 },
+  moderate: { x: 82, y: 62, radius: 10 },
+  hard: { x: 50, y: 88, radius: 11 },
+};
+
+function isBlocked(nextPosition) {
+  const avatarWidth = 4.5;
+  const avatarHeight = 11;
+
+  const avatarLeft = nextPosition.x - avatarWidth / 2;
+  const avatarRight = nextPosition.x + avatarWidth / 2;
+  const avatarTop = nextPosition.y - avatarHeight / 2;
+  const avatarBottom = nextPosition.y + avatarHeight / 2;
+
+  const tables = [
+    { left: 44, right: 56, top: 62, bottom: 92 },
+    { left: 15, right: 25, top: 61, bottom: 87 },
+    { left: 75, right: 85, top: 61, bottom: 87 },
+  ];
+
+  return tables.some((table) => {
+    const overlapX = avatarLeft < table.right && avatarRight > table.left;
+    const overlapY = avatarTop < table.bottom && avatarBottom > table.top;
+    return overlapX && overlapY;
+  });
+}
+
+function getNearbyTable(position) {
+  const entries = [
+    { key: 'easy', label: 'Easy', ...tableZones.easy },
+    { key: 'moderate', label: 'Moderate', ...tableZones.moderate },
+    { key: 'hard', label: 'Hard', ...tableZones.hard },
+  ];
+
+  for (const entry of entries) {
+    const distance = Math.hypot(position.x - entry.x, position.y - entry.y);
+    if (distance <= entry.radius) {
+      return entry;
+    }
+  }
+
+  return null;
+}
+
+function getTableByKey(tableKey) {
+  const tables = {
+    easy: { key: 'easy', label: 'Easy', ...tableZones.easy },
+    moderate: { key: 'moderate', label: 'Moderate', ...tableZones.moderate },
+    hard: { key: 'hard', label: 'Hard', ...tableZones.hard },
+  };
+
+  return tables[tableKey] ?? null;
+}
+
+function createDeck() {
+  const suits = ['S', 'H', 'D', 'C'];
+  const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+  const deck = [];
+
+  for (const suit of suits) {
+    for (const rank of ranks) {
+      deck.push({ rank, suit });
+    }
+  }
+
+  for (let index = deck.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [deck[index], deck[randomIndex]] = [deck[randomIndex], deck[index]];
+  }
+
+  return deck;
+}
+
+function handValue(hand) {
+  let total = 0;
+  let aces = 0;
+
+  for (const card of hand) {
+    if (card.rank === 'A') {
+      total += 11;
+      aces += 1;
+    } else if (['K', 'Q', 'J'].includes(card.rank)) {
+      total += 10;
+    } else {
+      total += Number(card.rank);
+    }
+  }
+
+  while (total > 21 && aces > 0) {
+    total -= 10;
+    aces -= 1;
+  }
+
+  return total;
+}
+
+function cardLabel(card) {
+  return `${card.rank}${card.suit}`;
+}
+
+function cardImageUrl(card) {
+  const suitNames = {
+    S: 'spades',
+    H: 'hearts',
+    D: 'diamonds',
+    C: 'clubs',
+  };
+
+  const rankNames = {
+    A: 'ace',
+    J: 'jack',
+    Q: 'queen',
+    K: 'king',
+  };
+
+  const rankName = rankNames[card.rank] ?? card.rank;
+  return `https://raw.githubusercontent.com/hayeah/playing-cards-assets/master/png/${rankName}_of_${suitNames[card.suit]}.png`;
+}
+
+function suitGlyph(suit) {
+  return {
+    S: '♠',
+    H: '♥',
+    D: '♦',
+    C: '♣',
+  }[suit] ?? suit;
+}
+
+function createRound(difficulty) {
+  const deck = createDeck();
+  const playerHand = [deck.pop(), deck.pop()];
+  const dealerHand = [deck.pop(), deck.pop()];
+
+  return {
+    difficulty,
+    deck,
+    playerHand,
+    dealerHand,
+    status: 'player-turn',
+    message: 'Choose Hit or Stand.',
+    wager: null,
+  };
+}
+
+function getCoinArt(balance) {
+  if (balance >= 1000000) return { src: coinTier1m, label: '1M+', badge: 'mythic' };
+  if (balance >= 500000) return { src: coinTier500k, label: '500k+', badge: 'epic' };
+  if (balance >= 100000) return { src: coinTier100k, label: '100k+', badge: 'rare' };
+  if (balance >= 15000) return { src: coinTier15k, label: '15k+', badge: 'uncommon' };
+  return { src: coinTier500, label: '500', badge: 'starter' };
+}
+
+function scheduleTableReset(setTablePhase, setRound, setBetInput) {
+  window.setTimeout(() => {
+    setTablePhase('bet');
+    setRound(null);
+    setBetInput('500');
+  }, 1800);
+}
+
+function CardFace({ card }) {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  if (imageFailed) {
+    const isRed = card.suit === 'H' || card.suit === 'D';
+    return (
+      <div className="flex h-full w-full flex-col justify-between rounded-[0.55rem] bg-white p-2 text-[11px] font-semibold shadow-[0_10px_18px_rgba(0,0,0,0.35)]">
+        <div className={`leading-none ${isRed ? 'text-red-600' : 'text-black'}`}>
+          <div>{card.rank}</div>
+          <div>{suitGlyph(card.suit)}</div>
+        </div>
+        <div className={`self-end text-lg leading-none ${isRed ? 'text-red-600' : 'text-black'}`}>{suitGlyph(card.suit)}</div>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={cardImageUrl(card)}
+      alt={cardLabel(card)}
+      className="h-full w-full object-contain p-1.5"
+      onError={() => setImageFailed(true)}
+    />
+  );
+}
+
+export default function App() {
+  const walkRightFrames = useMemo(
+    () => [walkRight1, walkRight2, walkRight3, walkRight4, walkRight5, walkRight6],
+    [],
+  );
+  const walkUpFrames = useMemo(() => [walkUp1, walkUp2, walkUp3, walkUp4], []);
+  const walkDownFrames = useMemo(() => [walkDown1, walkDown2, walkDown3, walkDown4], []);
+  const [activeMove, setActiveMove] = useState('idle');
+  const [direction, setDirection] = useState('right');
+  const [position, setPosition] = useState({ x: 50.5, y: 26 });
+  const [isWalking, setIsWalking] = useState(false);
+  const [pressedKeys, setPressedKeys] = useState({ left: false, right: false, up: false, down: false });
+  const [actionMessage, setActionMessage] = useState('');
+  const [activeTable, setActiveTable] = useState(null);
+  const [tablePhase, setTablePhase] = useState('bet');
+  const [round, setRound] = useState(null);
+  const [coins, setCoins] = useState(10000000);
+  const [betInput, setBetInput] = useState('500');
+  const [winCount, setWinCount] = useState(0);
+  const [showWinModal, setShowWinModal] = useState(false);
+  const [showLoseModal, setShowLoseModal] = useState(false);
+  const [loseCount, setLoseCount] = useState(0);
+  const positionRef = useRef(position);
+  const nearbyTableRef = useRef(null);
+  const coinsRef = useRef(10000000);
+  const walkRightImage = useSpriteFrames(walkRightFrames, 120);
+  const walkUpImage = useSpriteFrames(walkUpFrames, 120);
+  const walkDownImage = useSpriteFrames(walkDownFrames, 120);
+  const nearbyTable = getNearbyTable(position);
+  const currentTableZone = activeTable ? getTableByKey(activeTable) : nearbyTable;
+  const liveBetAmount = Number(betInput.replace(/[^0-9]/g, '')) || 0;
+  const betCoinArt = getCoinArt(liveBetAmount || 500);
+  const difficultyMeta = {
+    easy: {
+      title: 'Easy Table',
+      subtitle: 'Low stakes, simple pace.',
+      accent: 'from-emerald-400/35 to-emerald-700/15',
+      dealerStand: 15,
+    },
+    moderate: {
+      title: 'Moderate Table',
+      subtitle: 'Balanced table, standard risk.',
+      accent: 'from-amber-300/35 to-amber-700/15',
+      dealerStand: 16,
+    },
+    hard: {
+      title: 'Hard Table',
+      subtitle: 'High tension, high reward.',
+      accent: 'from-rose-400/35 to-rose-700/15',
+      dealerStand: 17,
+    },
+  };
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
+  useEffect(() => {
+    coinsRef.current = coins;
+  }, [coins]);
+
+  useEffect(() => {
+    nearbyTableRef.current = getNearbyTable(position);
+  }, [position]);
+
+  useEffect(() => {
+    if (!round || round.status !== 'player-win') {
+      setWinCount(0);
+      setShowWinModal(false);
+      return undefined;
+    }
+
+    setShowWinModal(true);
+    const targetAmount = (round.wager ?? 0) * 2;
+    let currentAmount = 0;
+    const step = Math.max(1, Math.ceil(targetAmount / 45));
+
+    setWinCount(0);
+
+    const timer = window.setInterval(() => {
+      currentAmount = Math.min(targetAmount, currentAmount + step);
+      setWinCount(currentAmount);
+
+      if (currentAmount >= targetAmount) {
+        window.clearInterval(timer);
+      }
+    }, 24);
+
+    return () => window.clearInterval(timer);
+  }, [round?.status, round?.wager]);
+
+  useEffect(() => {
+    if (!round || (round.status !== 'dealer-win' && round.status !== 'player-bust')) {
+      setLoseCount(0);
+      setShowLoseModal(false);
+      return undefined;
+    }
+
+    setShowLoseModal(true);
+    const targetAmount = round.wager ?? 0;
+    let currentAmount = 0;
+    const step = Math.max(1, Math.ceil(targetAmount / 45));
+
+    setLoseCount(0);
+
+    const timer = window.setInterval(() => {
+      currentAmount = Math.min(targetAmount, currentAmount + step);
+      setLoseCount(currentAmount);
+
+      if (currentAmount >= targetAmount) {
+        window.clearInterval(timer);
+      }
+    }, 24);
+
+    return () => window.clearInterval(timer);
+  }, [round?.status, round?.wager]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
+        setPressedKeys((currentKeys) => ({ ...currentKeys, left: true }));
+      }
+      if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') {
+        setPressedKeys((currentKeys) => ({ ...currentKeys, right: true }));
+      }
+      if (event.key === 'ArrowUp' || event.key.toLowerCase() === 'w') {
+        setPressedKeys((currentKeys) => ({ ...currentKeys, up: true }));
+      }
+      if (event.key === 'ArrowDown' || event.key.toLowerCase() === 's') {
+        setPressedKeys((currentKeys) => ({ ...currentKeys, down: true }));
+      }
+      if (event.key.toLowerCase() === 'e') {
+        const currentNearbyTable = nearbyTableRef.current;
+        if (!currentNearbyTable) return;
+        setActiveTable(currentNearbyTable.key);
+        setActionMessage('');
+        setTablePhase('bet');
+        setRound(null);
+      }
+    };
+
+    const handleKeyUp = (event) => {
+      if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') {
+        setPressedKeys((currentKeys) => ({ ...currentKeys, left: false }));
+      }
+      if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') {
+        setPressedKeys((currentKeys) => ({ ...currentKeys, right: false }));
+      }
+      if (event.key === 'ArrowUp' || event.key.toLowerCase() === 'w') {
+        setPressedKeys((currentKeys) => ({ ...currentKeys, up: false }));
+      }
+      if (event.key === 'ArrowDown' || event.key.toLowerCase() === 's') {
+        setPressedKeys((currentKeys) => ({ ...currentKeys, down: false }));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setPosition((currentPosition) => {
+        const step = pressedKeys.down ? 0 : pressedKeys.up ? 2.6 : 0;
+        let nextX = currentPosition.x;
+        let nextY = currentPosition.y;
+        let walking = false;
+
+        if (pressedKeys.left && !pressedKeys.right) {
+          nextX = Math.max(bounds.x.min, currentPosition.x - 0.9);
+          setDirection('left');
+          setActiveMove('right');
+          walking = true;
+        }
+
+        if (pressedKeys.right && !pressedKeys.left) {
+          nextX = Math.min(bounds.x.max, currentPosition.x + 0.9);
+          setDirection('right');
+          setActiveMove('right');
+          walking = true;
+        }
+
+        if (pressedKeys.up && !pressedKeys.down) {
+          nextY = Math.max(bounds.y.min, currentPosition.y - step);
+          setActiveMove('up');
+          walking = true;
+        }
+
+        if (pressedKeys.down && !pressedKeys.up) {
+          nextY = Math.min(bounds.y.max, currentPosition.y + 1.2);
+          setActiveMove('down');
+          walking = true;
+        }
+
+        const attemptedPosition = { x: nextX, y: nextY };
+        if (isBlocked(attemptedPosition)) {
+          return currentPosition;
+        }
+
+        if (!walking) {
+          setActiveMove('idle');
+        }
+
+        setIsWalking(walking);
+        return { x: nextX, y: nextY };
+      });
+    }, 16);
+
+    return () => window.clearInterval(timer);
+  }, [pressedKeys]);
+
+  const tableMeta = activeTable ? difficultyMeta[activeTable] : null;
+  const doubleCost = round?.status === 'player-turn' ? (round.wager ?? 0) : 0;
+  const canDouble = !!round && round.status === 'player-turn' && coins >= doubleCost;
+  const doubleShortfall = canDouble ? 0 : Math.max(0, doubleCost - coins);
+
+  const dealRound = () => {
+    if (!activeTable) return;
+    const wager = Math.max(1, liveBetAmount || Math.max(5, difficultyMeta[activeTable].dealerStand - 10));
+    const currentCoins = coinsRef.current;
+
+    if (currentCoins < wager) {
+      return;
+    }
+
+    coinsRef.current = currentCoins - wager;
+    setCoins(currentCoins - wager);
+    setTablePhase('game');
+    setRound({
+      ...createRound(activeTable),
+      wager,
+    });
+  };
+
+  const hit = () => {
+    setRound((currentRound) => {
+      if (!currentRound || currentRound.status !== 'player-turn') return currentRound;
+      const nextDeck = [...currentRound.deck];
+      const nextPlayerHand = [...currentRound.playerHand, nextDeck.pop()];
+      const nextPlayerTotal = handValue(nextPlayerHand);
+
+      if (nextPlayerTotal > 21) {
+        scheduleTableReset(setTablePhase, setRound, setBetInput);
+        return {
+          ...currentRound,
+          deck: nextDeck,
+          playerHand: nextPlayerHand,
+          status: 'player-bust',
+          message: 'You busted. Dealer wins.',
+        };
+      }
+
+      return {
+        ...currentRound,
+        deck: nextDeck,
+        playerHand: nextPlayerHand,
+        message: 'Hit or stand?',
+      };
+    });
+  };
+
+  const stand = () => {
+    setRound((currentRound) => {
+      if (!currentRound || currentRound.status !== 'player-turn') return currentRound;
+
+      const nextDeck = [...currentRound.deck];
+      const nextDealerHand = [...currentRound.dealerHand];
+      const dealerStand = difficultyMeta[currentRound.difficulty].dealerStand;
+      let dealerTotal = handValue(nextDealerHand);
+
+      while (dealerTotal < dealerStand) {
+        nextDealerHand.push(nextDeck.pop());
+        dealerTotal = handValue(nextDealerHand);
+      }
+
+      const playerTotal = handValue(currentRound.playerHand);
+      let message = 'Push.';
+      let status = 'push';
+      const wager = currentRound.wager ?? 0;
+
+      if (dealerTotal > 21 || playerTotal > dealerTotal) {
+        message = 'You win!';
+        status = 'player-win';
+        coinsRef.current += wager * 2;
+        setCoins((currentCoins) => currentCoins + wager * 2);
+        scheduleTableReset(setTablePhase, setRound, setBetInput);
+      } else if (playerTotal < dealerTotal) {
+        message = 'Dealer wins.';
+        status = 'dealer-win';
+        scheduleTableReset(setTablePhase, setRound, setBetInput);
+      } else {
+        coinsRef.current += wager;
+        setCoins((currentCoins) => currentCoins + wager);
+        scheduleTableReset(setTablePhase, setRound, setBetInput);
+      }
+
+      return {
+        ...currentRound,
+        deck: nextDeck,
+        dealerHand: nextDealerHand,
+        status,
+        message,
+      };
+    });
+  };
+
+  const doubleBet = () => {
+    setRound((currentRound) => {
+      if (!currentRound || currentRound.status !== 'player-turn') return currentRound;
+
+      const currentWager = currentRound.wager ?? 0;
+      const doubleAmount = currentWager;
+      const currentCoins = coinsRef.current;
+
+      if (currentCoins < doubleAmount) {
+        return currentRound;
+      }
+
+      const nextWager = currentWager + doubleAmount;
+      const nextDeck = [...currentRound.deck];
+      const nextPlayerHand = [...currentRound.playerHand, nextDeck.pop()];
+
+      coinsRef.current = currentCoins - doubleAmount;
+      setCoins(currentCoins - doubleAmount);
+
+      return {
+        ...currentRound,
+        deck: nextDeck,
+        playerHand: nextPlayerHand,
+        wager: nextWager,
+        message: `Double accepted. Bet is now ${nextWager.toLocaleString()}.`,
+      };
+    });
+  };
+
+  if (activeTable && tableMeta) {
+    const playerTotal = round ? handValue(round.playerHand) : 0;
+    const dealerTotal = round ? handValue(round.dealerHand) : 0;
+    const coinArt = getCoinArt(coins);
+
+    return (
+      <main className="relative min-h-screen overflow-hidden bg-white text-slate-900">
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-100"
+          style={{ backgroundImage: `url(${backgroundImage})` }}
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.1),rgba(255,255,255,0.75))]" />
+
+        <section className="relative flex min-h-screen items-stretch px-4 py-4 sm:px-6 sm:py-6">
+          <div className="grid min-h-[calc(100vh-2rem)] w-full gap-4 xl:grid-cols-[minmax(0,1.45fr)_420px]">
+            <div className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_30px_100px_rgba(0,0,0,0.14)]">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.8),rgba(240,244,248,0.95)_76%)]" />
+
+              <div className="relative flex h-full min-h-[28rem] flex-col p-4 sm:p-5 lg:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="text-[11px] uppercase tracking-[0.7em] text-slate-500">BLACKJACK CASINO</p>
+                    <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{tableMeta.title}</h1>
+                    <p className="text-sm text-slate-600">{tableMeta.subtitle}</p>
+                  </div>
+
+                  <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2">
+                    <img src={coinArt.src} alt={coinArt.label} className="h-12 w-12 object-contain" />
+                    <div className="leading-tight">
+                      <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Coins</p>
+                      <p className="text-lg font-semibold text-slate-900">{coins.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="relative mt-4 flex min-h-0 flex-1 items-end justify-center">
+                  <div className="relative aspect-[16/9] h-full w-full max-w-[1100px]">
+                    <img
+                      src={tableLeft}
+                      alt="Table left"
+                      className="absolute left-[4%] top-[41%] w-[18%] max-w-[250px] select-none object-contain drop-shadow-[0_18px_24px_rgba(0,0,0,0.2)]"
+                    />
+                    <img
+                      src={tableRight}
+                      alt="Table right"
+                      className="absolute right-[4%] top-[41%] w-[18%] max-w-[250px] select-none object-contain drop-shadow-[0_18px_24px_rgba(0,0,0,0.2)]"
+                    />
+                    <img
+                      src={tableFront}
+                      alt="Table front"
+                      className="absolute bottom-0 left-1/2 w-[34%] max-w-[420px] -translate-x-1/2 select-none object-contain drop-shadow-[0_24px_30px_rgba(0,0,0,0.24)]"
+                    />
+
+                    <div
+                      className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2"
+                      style={{ left: `${position.x}%`, top: `${position.y}%` }}
+                    >
+                      {currentTableZone ? (
+                        <div className="rounded-full border border-slate-200 bg-white/90 px-4 py-1 text-[10px] uppercase tracking-[0.35em] text-slate-700 backdrop-blur-sm">
+                          Press E to enter {currentTableZone.label}
+                        </div>
+                      ) : null}
+                      <div className="spawn-label rounded-full border border-slate-200 bg-white/90 px-4 py-1 text-[10px] uppercase tracking-[0.38em] text-slate-600 backdrop-blur-sm">
+                        Player Spawn
+                      </div>
+                      <div className={`spawn-avatar relative ${isWalking ? 'walking' : ''}`}>
+                        <div className="absolute inset-x-0 bottom-2 -z-10 h-6 rounded-full bg-emerald-300/18 blur-2xl" />
+                        <img
+                          src={
+                            activeMove === 'up'
+                              ? walkUpImage
+                              : activeMove === 'down'
+                                ? walkDownImage
+                                : activeMove === 'right'
+                                  ? walkRightImage
+                                  : standFront
+                          }
+                          alt="Player character"
+                          className={`w-[102px] select-none object-contain drop-shadow-[0_20px_20px_rgba(0,0,0,0.72)] sm:w-[112px] md:w-[124px] lg:w-[132px] ${direction === 'left' ? 'scale-x-[-1]' : ''}`}
+                        />
+                      </div>
+                    </div>
+
+                    {actionMessage ? (
+                      <div className="absolute left-1/2 top-6 -translate-x-1/2 rounded-full border border-slate-200 bg-white/95 px-5 py-2 text-xs tracking-[0.18em] text-slate-700 backdrop-blur-md">
+                        {actionMessage}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <aside className="flex h-full flex-col rounded-[2rem] border border-slate-200 bg-white p-4 shadow-[0_30px_100px_rgba(0,0,0,0.12)] backdrop-blur-xl sm:p-5">
+              <div className="rounded-[1.65rem] border border-slate-200 bg-slate-50 p-4 sm:p-5">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-[11px] uppercase tracking-[0.7em] text-slate-500">GAME PANEL</p>
+                      <h2 className="text-xl font-semibold tracking-tight text-slate-900">{tableMeta.title}</h2>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2">
+                        <img src={coinArt.src} alt={coinArt.label} className="h-12 w-12 object-contain" />
+                        <div className="leading-tight">
+                          <p className="text-[10px] uppercase tracking-[0.35em] text-slate-500">Wallet</p>
+                          <p className="text-lg font-semibold text-slate-900">{coins.toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTable(null);
+                          setTablePhase('bet');
+                          setRound(null);
+                        }}
+                        className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-50"
+                      >
+                        Leave Table
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1rem] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                    Difficulty: <span className="font-semibold text-slate-900">{tableMeta.title}</span>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-4">
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 sm:p-5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase tracking-[0.45em] text-slate-500">Actions</span>
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+                        {tablePhase === 'bet' ? 'betting' : round?.status ?? 'Ready'}
+                      </span>
+                    </div>
+
+                    {tablePhase === 'bet' ? (
+                      <>
+                        <div className="mt-5 rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4 sm:p-5">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs uppercase tracking-[0.45em] text-slate-500">Bet Amount</p>
+                              <p className="mt-1 text-sm text-slate-600">Enter your wager before the game board appears.</p>
+                            </div>
+                            <div className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                              {betCoinArt.label}
+                            </div>
+                          </div>
+
+                          <div className="mt-4 flex flex-col gap-4">
+                            <div className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
+                              <input
+                                value={betInput}
+                                onChange={(event) => setBetInput(event.target.value)}
+                                inputMode="numeric"
+                                className="w-full bg-transparent text-3xl font-semibold tracking-tight text-slate-900 outline-none placeholder:text-slate-300"
+                                placeholder="Enter bet"
+                              />
+                              <p className="mt-2 text-xs uppercase tracking-[0.35em] text-slate-400">
+                                Current preview: {betCoinArt.label}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center justify-center rounded-[1.25rem] border border-slate-200 bg-white p-3">
+                              <img src={betCoinArt.src} alt={betCoinArt.label} className="h-28 w-28 object-contain" />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-3 sm:p-4">
+                          <p className="px-1 pb-3 text-xs uppercase tracking-[0.45em] text-slate-500">Coin Bank</p>
+                          <div className="overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white">
+                            <img src={coinsBankImage} alt="Coins bank reference" className="block h-auto w-full object-contain" />
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={dealRound}
+                            className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50"
+                          >
+                            Deal Round
+                          </button>
+                          <div className="rounded-[1rem] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                            The board appears after you deal.
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="mt-5 rounded-[1.25rem] border border-slate-200 bg-white p-4 sm:p-5">
+                          <div className="grid gap-4">
+                            <div className="rounded-[1rem] border border-slate-200 bg-white p-4">
+                              <div className="flex items-center justify-between">
+                                <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Dealer</p>
+                                <p className="text-sm text-slate-700">{dealerTotal}</p>
+                              </div>
+                            </div>
+
+                            <div className="rounded-[1rem] border border-slate-200 bg-white p-4">
+                              <div className="flex items-center justify-between">
+                                <p className="text-[10px] uppercase tracking-[0.4em] text-slate-500">Player</p>
+                                <p className="text-sm text-slate-700">{playerTotal}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 rounded-[1rem] border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-700">
+                            {round?.message ?? 'Deal cards to start the round.'}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <button
+                            type="button"
+                            onClick={doubleBet}
+                            disabled={!canDouble}
+                            className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                          >
+                            <span className="block">Double</span>
+                            {!canDouble ? (
+                              <span className="mt-1 block text-[10px] uppercase tracking-[0.3em] text-slate-400">
+                                Need {doubleShortfall.toLocaleString()} more
+                              </span>
+                            ) : null}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={hit}
+                            className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 transition hover:bg-slate-50"
+                          >
+                            Hit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={stand}
+                            className="rounded-full border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 transition hover:bg-slate-50"
+                          >
+                            Stand
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+      {showWinModal && round?.status === 'player-win' ? (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
+            <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[2rem] border border-amber-300/35 bg-[linear-gradient(180deg,rgba(10,10,10,0.98),rgba(0,0,0,0.98))] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.8)]">
+              <div className="absolute inset-0 sparkle-layer" />
+              <div className="absolute -left-10 top-6 text-5xl coin-float">🪙</div>
+              <div className="absolute right-6 top-8 text-4xl coin-float delay-1">🪙</div>
+              <div className="absolute bottom-8 left-10 text-3xl coin-float delay-2">🪙</div>
+              <div className="absolute bottom-10 right-10 text-5xl coin-float delay-3">🪙</div>
+
+              <div className="relative rounded-[1.5rem] border border-amber-200/70 bg-[linear-gradient(180deg,rgba(255,215,120,0.08),rgba(0,0,0,0.25))] p-5 text-center">
+                <p className="text-[10px] uppercase tracking-[0.8em] text-amber-200/80">WIN</p>
+                <h2 className="mt-2 text-4xl font-black tracking-tight text-amber-50 sm:text-5xl">Congratulations</h2>
+                <p className="mt-2 text-sm text-amber-100/75">You won</p>
+                <div className="mt-5 rounded-[1.25rem] border-2 border-amber-300/70 bg-black/55 px-5 py-4">
+                  <span className="block text-xs uppercase tracking-[0.55em] text-amber-200/70">Payout</span>
+                  <span className="mt-2 block text-5xl font-black tabular-nums text-amber-50 sm:text-6xl">
+                    {winCount.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+        </div>
+      ) : null}
+
+      {showLoseModal && (round?.status === 'dealer-win' || round?.status === 'player-bust') ? (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 px-4 backdrop-blur-sm">
+          <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(4,4,4,0.99),rgba(0,0,0,0.99))] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.95)]">
+            <div className="absolute inset-0 opacity-10">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)]" />
+            </div>
+
+            <div className="relative rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.28))] p-5 text-center">
+              <p className="text-[10px] uppercase tracking-[0.8em] text-white/30">LOSE</p>
+              <h2 className="mt-2 text-4xl font-black tracking-tight text-white/92 sm:text-5xl">Round Lost</h2>
+              <p className="mt-2 text-sm text-white/55">You lost</p>
+              <div className="mt-5 rounded-[1.25rem] border border-white/10 bg-black/65 px-5 py-4">
+                <span className="block text-xs uppercase tracking-[0.55em] text-white/30">Loss</span>
+                <span className="mt-2 block text-5xl font-black tabular-nums text-white/90 sm:text-6xl">
+                  -{loseCount.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </main>
+  );
+}
+}
