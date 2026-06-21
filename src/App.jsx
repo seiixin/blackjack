@@ -1087,7 +1087,7 @@ export default function App() {
           <img
             src={tableLeft}
             alt="Easy table"
-            className="w-32 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)] sm:w-44"
+            className="w-48 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)] sm:w-72"
           />
         </button>
 
@@ -1096,12 +1096,12 @@ export default function App() {
           type="button"
           className="absolute"
           onClick={() => setActiveTable('moderate')}
-          style={{ left: `${tableZones.moderate.x}%`, top: `${tableZones.moderate.y}%`, transform: 'translate(-50%, -50%)' }}
+          style={{ left: isMobile ? '72%' : `${tableZones.moderate.x}%`, top: `${tableZones.moderate.y}%`, transform: 'translate(-50%, -50%)' }}
         >
           <img
             src={tableRight}
             alt="Moderate table"
-            className="w-32 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)] sm:w-44"
+            className="w-80 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)] sm:w-72"
           />
         </button>
 
@@ -1115,7 +1115,7 @@ export default function App() {
           <img
             src={tableFront}
             alt="Hard table"
-            className="w-36 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)] sm:w-48"
+            className="w-56 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)] sm:w-80"
           />
         </button>
 
@@ -1136,7 +1136,7 @@ export default function App() {
           className="absolute z-10"
           style={{ left: `${position.x}%`, top: `${position.y}%`, transform: 'translate(-50%, -50%)' }}
         >
-          <div className={`spawn-avatar relative h-28 w-28 sm:h-32 sm:w-32 ${isWalking ? 'walking' : ''}`}>
+          <div className={`spawn-avatar relative h-44 w-44 sm:h-56 sm:w-56 ${isWalking ? 'walking' : ''}`}>
             <img
               src={
                 activeMove === 'up'
