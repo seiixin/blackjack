@@ -54,6 +54,8 @@ const tableZones = {
   hard: { x: 50, y: 88, radius: 11 },
 };
 
+const WALK_SPEED = 0.8;
+
 function isBlocked(_nextPosition) {
   return false;
 }
@@ -172,6 +174,7 @@ function createRound(difficulty) {
     status: 'player-turn',
     message: 'Choose Hit or Stand.',
     wager: null,
+    hasDoubled: false,
   };
 }
 
@@ -239,6 +242,8 @@ export default function App() {
   const [showWinModal, setShowWinModal] = useState(false);
   const [showLoseModal, setShowLoseModal] = useState(false);
   const [loseCount, setLoseCount] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [joystick, setJoystick] = useState({ x: 0, y: 0, active: false });
   const positionRef = useRef(position);
   const nearbyTableRef = useRef(null);
   const coinsRef = useRef(10000000);
@@ -281,6 +286,14 @@ export default function App() {
   useEffect(() => {
     nearbyTableRef.current = getNearbyTable(position);
   }, [position]);
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 768px)');
+    const updateMobile = () => setIsMobile(media.matches);
+    updateMobile();
+    media.addEventListener('change', updateMobile);
+    return () => media.removeEventListener('change', updateMobile);
+  }, []);
 
   useEffect(() => {
     if (!round || round.status !== 'player-win') {
@@ -384,33 +397,32 @@ export default function App() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       setPosition((currentPosition) => {
-        const step = pressedKeys.down ? 0 : pressedKeys.up ? 2.6 : 0;
         let nextX = currentPosition.x;
         let nextY = currentPosition.y;
         let walking = false;
 
         if (pressedKeys.left && !pressedKeys.right) {
-          nextX = Math.max(bounds.x.min, currentPosition.x - 0.9);
+          nextX = Math.max(bounds.x.min, currentPosition.x - WALK_SPEED);
           setDirection('left');
           setActiveMove('right');
           walking = true;
         }
 
         if (pressedKeys.right && !pressedKeys.left) {
-          nextX = Math.min(bounds.x.max, currentPosition.x + 0.9);
+          nextX = Math.min(bounds.x.max, currentPosition.x + WALK_SPEED);
           setDirection('right');
           setActiveMove('right');
           walking = true;
         }
 
         if (pressedKeys.up && !pressedKeys.down) {
-          nextY = Math.max(bounds.y.min, currentPosition.y - step);
+          nextY = Math.max(bounds.y.min, currentPosition.y - WALK_SPEED);
           setActiveMove('up');
           walking = true;
         }
 
         if (pressedKeys.down && !pressedKeys.up) {
-          nextY = Math.min(bounds.y.max, currentPosition.y + 1.2);
+          nextY = Math.min(bounds.y.max, currentPosition.y + WALK_SPEED);
           setActiveMove('down');
           walking = true;
         }
@@ -434,7 +446,7 @@ export default function App() {
 
   const tableMeta = activeTable ? difficultyMeta[activeTable] : null;
   const doubleCost = round?.status === 'player-turn' ? (round.wager ?? 0) : 0;
-  const canDouble = !!round && round.status === 'player-turn' && coins >= doubleCost;
+  const canDouble = !!round && round.status === 'player-turn' && !round.hasDoubled && coins >= doubleCost;
   const doubleShortfall = canDouble ? 0 : Math.max(0, doubleCost - coins);
 
   const dealRound = () => {
@@ -464,12 +476,12 @@ export default function App() {
 
       if (nextPlayerTotal > 21) {
         scheduleTableReset(setTablePhase, setRound, setBetInput);
-        return {
-          ...currentRound,
-          deck: nextDeck,
-          playerHand: nextPlayerHand,
-          status: 'player-bust',
-          message: 'You busted. Dealer wins.',
+      return {
+        ...currentRound,
+        deck: nextDeck,
+        playerHand: nextPlayerHand,
+        status: 'player-bust',
+        message: 'You busted. Dealer wins.',
         };
       }
 
@@ -542,18 +554,84 @@ export default function App() {
       const nextWager = currentWager + doubleAmount;
       const nextDeck = [...currentRound.deck];
       const nextPlayerHand = [...currentRound.playerHand, nextDeck.pop()];
+      const nextPlayerTotal = handValue(nextPlayerHand);
 
       coinsRef.current = currentCoins - doubleAmount;
       setCoins(currentCoins - doubleAmount);
+
+      if (nextPlayerTotal > 21) {
+        scheduleTableReset(setTablePhase, setRound, setBetInput);
+        return {
+          ...currentRound,
+          deck: nextDeck,
+          playerHand: nextPlayerHand,
+          wager: nextWager,
+          hasDoubled: true,
+          status: 'player-bust',
+          message: 'You busted. Dealer wins.',
+        };
+      }
 
       return {
         ...currentRound,
         deck: nextDeck,
         playerHand: nextPlayerHand,
         wager: nextWager,
+        hasDoubled: true,
         message: `Double accepted. Bet is now ${nextWager.toLocaleString()}.`,
       };
     });
+  };
+
+  const enterNearbyTable = () => {
+    const currentNearbyTable = nearbyTableRef.current;
+    if (!currentNearbyTable) return;
+    setActiveTable(currentNearbyTable.key);
+    setActionMessage('');
+    setTablePhase('bet');
+    setRound(null);
+  };
+
+  const setJoystickMove = (dx, dy) => {
+    const magnitude = Math.hypot(dx, dy);
+    if (magnitude < 12) {
+      setJoystick({ x: 0, y: 0, active: true });
+      setPressedKeys((currentKeys) => ({
+        ...currentKeys,
+        left: false,
+        right: false,
+        up: false,
+        down: false,
+      }));
+      return;
+    }
+
+    const normX = dx / magnitude;
+    const normY = dy / magnitude;
+    const nextKeys = {
+      left: normX < -0.35,
+      right: normX > 0.35,
+      up: normY < -0.35,
+      down: normY > 0.35,
+    };
+
+    setJoystick({
+      x: Math.max(-24, Math.min(24, dx)),
+      y: Math.max(-24, Math.min(24, dy)),
+      active: true,
+    });
+    setPressedKeys((currentKeys) => ({ ...currentKeys, ...nextKeys }));
+  };
+
+  const clearJoystickMove = () => {
+    setJoystick({ x: 0, y: 0, active: false });
+    setPressedKeys((currentKeys) => ({
+      ...currentKeys,
+      left: false,
+      right: false,
+      up: false,
+      down: false,
+    }));
   };
 
   if (activeTable && tableMeta) {
@@ -569,10 +647,10 @@ export default function App() {
         />
         <div className="absolute inset-0 bg-black/40" />
 
-        <section className="relative flex min-h-screen items-stretch px-4 py-4 sm:px-6 sm:py-6">
-          <div className="grid min-h-[calc(100vh-2rem)] w-full gap-4 xl:grid-cols-[minmax(0,1.45fr)_420px]">
+        <section className="relative flex min-h-screen items-stretch px-3 py-3 sm:px-6 sm:py-6">
+          <div className="grid min-h-[calc(100svh-1.5rem)] w-full gap-3 xl:grid-cols-[minmax(0,1.45fr)_420px]">
             {/* Left panel — gameboard with floating cards */}
-            <div className="relative overflow-hidden rounded-[2rem] border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,0.5)]">
+            <div className="relative min-h-[42svh] overflow-hidden rounded-[1.5rem] border border-white/10 shadow-[0_30px_100px_rgba(0,0,0,0.5)] sm:rounded-[2rem]">
               <div
                 className="absolute inset-0 bg-cover bg-center bg-no-repeat"
                 style={{ backgroundImage: `url(${gameboardBackground})` }}
@@ -580,21 +658,21 @@ export default function App() {
               <div className="absolute inset-0 bg-black/30" />
 
               {/* Bet coin — always visible, animates on tier change */}
-              <div className="absolute bottom-[10%] left-0 right-0 flex items-center justify-center pointer-events-none gap-3">
+              <div className="absolute bottom-[10%] left-0 right-0 flex items-center justify-center pointer-events-none gap-3 px-4">
                 {/* Double coin — lalabas lang kapag nag-double */}
                 {round?.wager && round.wager > (liveBetAmount || 500) ? (
                   <img
                     key={`double-${betCoinArt.badge}`}
                     src={betCoinArt.src}
                     alt={betCoinArt.label}
-                    className="coin-slide-in h-28 w-28 object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] -rotate-12"
+                    className="coin-slide-in h-20 w-20 object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] -rotate-12 sm:h-28 sm:w-28"
                   />
                 ) : null}
                 <img
                   key={betCoinArt.badge}
                   src={betCoinArt.src}
                   alt={betCoinArt.label}
-                  className="coin-pop h-32 w-32 object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]"
+                  className="coin-pop h-24 w-24 object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)] sm:h-32 sm:w-32"
                 />
               </div>
 
@@ -604,11 +682,11 @@ export default function App() {
 
                   {/* Dealer cards — dead center */}
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap justify-center gap-2 px-3">
                       {round.dealerHand.map((card, i) => (
                         <div
                           key={i}
-                          className="card-deal-down h-28 w-20 rounded-xl overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.6)]"
+                          className="card-deal-down h-24 w-16 overflow-hidden rounded-xl bg-white shadow-[0_8px_24px_rgba(0,0,0,0.6)] sm:h-28 sm:w-20"
                           style={{ animationDelay: `${i * 120}ms` }}
                         >
                           <CardFace card={card} />
@@ -616,13 +694,23 @@ export default function App() {
                       ))}
                     </div>
                   </div>
+                  <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2 xl:hidden">
+                    <div className="rounded-2xl border border-white/12 bg-black/55 px-3 py-2 backdrop-blur-md">
+                      <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">Dealer</p>
+                      <p className="mt-1 text-sm font-bold tabular-nums text-white">{dealerTotal}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/12 bg-black/55 px-3 py-2 backdrop-blur-md">
+                      <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">You</p>
+                      <p className="mt-1 text-sm font-bold tabular-nums text-white">{playerTotal}</p>
+                    </div>
+                  </div>
 
                   {/* Player cards — pinaka-baba */}
-                  <div className="absolute bottom-8 left-0 right-0 flex justify-center gap-2">
+                  <div className="absolute bottom-4 left-0 right-0 flex flex-wrap justify-center gap-2 px-3 sm:bottom-8">
                     {round.playerHand.map((card, i) => (
                       <div
                         key={i}
-                        className="card-deal-up h-28 w-20 rounded-xl overflow-hidden bg-white shadow-[0_8px_24px_rgba(0,0,0,0.6)]"
+                        className="card-deal-up h-24 w-16 overflow-hidden rounded-xl bg-white shadow-[0_8px_24px_rgba(0,0,0,0.6)] sm:h-28 sm:w-20"
                         style={{ animationDelay: `${i * 120 + 80}ms` }}
                       >
                         <CardFace card={card} />
@@ -632,27 +720,113 @@ export default function App() {
 
                 </div>
               ) : null}
+
+              <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 xl:hidden">
+                <div className="min-w-0 rounded-2xl border border-white/12 bg-black/55 px-3 py-2 backdrop-blur-md">
+                  <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">Wallet</p>
+                  <p className="mt-1 text-sm font-bold tabular-nums text-white">{coins.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {tablePhase === 'bet' ? (
+                <div className="absolute inset-x-0 top-20 z-20 px-3 xl:hidden">
+                  <div className="mx-auto flex w-full max-w-sm flex-col gap-3 rounded-[1.25rem] border border-white/12 bg-black/60 p-3 backdrop-blur-md">
+                    <div className="flex items-center gap-3">
+                      <img src={coinArt.src} alt={coinArt.label} className="h-9 w-9 shrink-0 object-contain" />
+                      <div className="min-w-0">
+                        <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">Wallet</p>
+                        <p className="mt-1 text-sm font-bold tabular-nums text-white">{coins.toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/8 bg-white/5 p-3">
+                      <p className="text-[9px] uppercase tracking-[0.5em] text-white/30">Your Bet</p>
+                      <div className="mt-3 flex items-center gap-3">
+                        <img key={betCoinArt.badge} src={betCoinArt.src} alt={betCoinArt.label} className="h-9 w-9 shrink-0 object-contain" />
+                        <input
+                          value={betInput}
+                          onChange={(e) => setBetInput(e.target.value)}
+                          inputMode="numeric"
+                          className="w-full bg-transparent text-2xl font-black tabular-nums text-white outline-none placeholder:text-white/15"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/8 bg-white/5 p-3">
+                      <p className="text-[9px] uppercase tracking-[0.5em] text-white/30">Coin Bank</p>
+                      <img src={coinsBankImage} alt="Coin tiers" className="mt-2 w-full object-contain" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={dealRound}
+                      className="w-full rounded-2xl bg-white py-3 text-sm font-bold text-black transition active:scale-[0.98]"
+                    >
+                      Deal Round
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTable(null); setTablePhase('bet'); setRound(null); }}
+                      className="w-full rounded-2xl border border-white/15 bg-black/35 py-3 text-[10px] font-semibold uppercase tracking-[0.35em] text-white/70"
+                    >
+                      Leave
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {tablePhase === 'game' ? (
+                <div className="absolute inset-x-0 bottom-3 z-20 px-3 xl:hidden">
+                  <div className="mx-auto grid max-w-sm grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={doubleBet}
+                      disabled={!canDouble}
+                      className="rounded-2xl border border-white/15 bg-black px-2 py-3 text-xs font-semibold text-white/85 disabled:opacity-25"
+                    >
+                      Double
+                    </button>
+                    <button
+                      type="button"
+                      onClick={hit}
+                      disabled={round?.status !== 'player-turn'}
+                      className="rounded-2xl bg-black px-2 py-3 text-xs font-bold text-white disabled:opacity-30"
+                    >
+                      Hit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={stand}
+                      disabled={round?.status !== 'player-turn'}
+                      className="rounded-2xl border border-white/20 bg-black px-2 py-3 text-xs font-semibold text-white disabled:opacity-30"
+                    >
+                      Stand
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
-            <aside className="flex h-full flex-col rounded-[2rem] border border-white/10 bg-[#0d0d0d] shadow-[0_30px_100px_rgba(0,0,0,0.7)] overflow-hidden">
+            <aside className="hidden h-full max-h-[calc(100svh-1.5rem)] flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-[#0d0d0d] shadow-[0_30px_100px_rgba(0,0,0,0.7)] sm:rounded-[2rem] xl:flex">
 
               {/* Header */}
               <div className="px-5 pt-5 pb-4 border-b border-white/8">
                 <p className="text-[10px] uppercase tracking-[0.7em] text-white/30 mb-1">Game Panel</p>
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-2xl font-bold text-white">{tableMeta.title}</h2>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="truncate text-xl font-bold text-white sm:text-2xl">{tableMeta.title}</h2>
+                    <p className="mt-1 text-sm text-white/45">{tableMeta.subtitle}</p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => { setActiveTable(null); setTablePhase('bet'); setRound(null); }}
-                    className="shrink-0 rounded-full border border-white/15 bg-white/8 px-4 py-1.5 text-xs font-medium text-white/60 transition hover:bg-white/15 hover:text-white/90"
+                    className="shrink-0 rounded-full border border-white/15 bg-white/8 px-4 py-2 text-xs font-medium text-white/60 transition hover:bg-white/15 hover:text-white/90"
                   >
                     Leave
                   </button>
                 </div>
 
                 {/* Wallet */}
-                <div className="mt-3 flex items-center gap-3 rounded-2xl bg-white/5 border border-white/8 px-3 py-2.5">
-                  <img src={coinArt.src} alt={coinArt.label} className="h-10 w-10 object-contain" />
+                <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/8 bg-white/5 px-3 py-2.5">
+                  <img src={coinArt.src} alt={coinArt.label} className="h-9 w-9 object-contain sm:h-10 sm:w-10" />
                   <div>
                     <p className="text-[9px] uppercase tracking-[0.4em] text-white/30">Wallet</p>
                     <p className="text-xl font-bold tabular-nums text-white leading-tight">{coins.toLocaleString()}</p>
@@ -661,7 +835,7 @@ export default function App() {
               </div>
 
               {/* Body */}
-              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
 
                 {tablePhase === 'bet' ? (
                   <>
@@ -674,7 +848,7 @@ export default function App() {
                           value={betInput}
                           onChange={(e) => setBetInput(e.target.value)}
                           inputMode="numeric"
-                          className="flex-1 bg-transparent text-4xl font-black tabular-nums text-white outline-none placeholder:text-white/15"
+                          className="flex-1 bg-transparent text-3xl font-black tabular-nums text-white outline-none placeholder:text-white/15 sm:text-4xl"
                           placeholder="0"
                         />
                       </div>
@@ -701,11 +875,11 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-2xl bg-white/5 border border-white/8 p-4 text-center">
                         <p className="text-[9px] uppercase tracking-[0.5em] text-white/30 mb-1">Dealer</p>
-                        <p className="text-5xl font-black tabular-nums text-white">{dealerTotal}</p>
+                        <p className="text-4xl font-black tabular-nums text-white sm:text-5xl">{dealerTotal}</p>
                       </div>
                       <div className="rounded-2xl bg-white/5 border border-white/8 p-4 text-center">
                         <p className="text-[9px] uppercase tracking-[0.5em] text-white/30 mb-1">You</p>
-                        <p className="text-5xl font-black tabular-nums text-white">{playerTotal}</p>
+                        <p className="text-4xl font-black tabular-nums text-white sm:text-5xl">{playerTotal}</p>
                       </div>
                     </div>
 
@@ -723,12 +897,12 @@ export default function App() {
                     ) : null}
 
                     {/* Action buttons */}
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <button
                         type="button"
                         onClick={doubleBet}
                         disabled={!canDouble}
-                        className="flex flex-col items-center justify-center rounded-2xl border border-white/15 bg-white/8 py-4 text-sm font-semibold text-white/80 transition hover:bg-white/15 active:scale-95 disabled:cursor-not-allowed disabled:opacity-25"
+                        className="flex flex-col items-center justify-center rounded-2xl border border-white/15 bg-black py-4 text-sm font-semibold text-white/80 transition hover:bg-black/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-25"
                       >
                         <span>Double</span>
                         {!canDouble && doubleCost > 0 ? (
@@ -741,7 +915,7 @@ export default function App() {
                         type="button"
                         onClick={hit}
                         disabled={round?.status !== 'player-turn'}
-                        className="rounded-2xl bg-white text-black font-bold text-sm py-4 transition hover:bg-white/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="rounded-2xl bg-black text-white font-bold text-sm py-4 transition hover:bg-black/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                       >
                         Hit
                       </button>
@@ -749,7 +923,7 @@ export default function App() {
                         type="button"
                         onClick={stand}
                         disabled={round?.status !== 'player-turn'}
-                        className="rounded-2xl border border-white/20 bg-white/10 text-white font-semibold text-sm py-4 transition hover:bg-white/20 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="rounded-2xl border border-white/20 bg-black text-white font-semibold text-sm py-4 transition hover:bg-black/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                       >
                         Stand
                       </button>
@@ -763,7 +937,7 @@ export default function App() {
 
       {round?.status === 'push' ? (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
-          <div className="win-modal relative w-full max-w-md overflow-hidden rounded-[2rem] border border-white/15 bg-[linear-gradient(180deg,rgba(18,18,18,0.98),rgba(8,8,8,0.98))] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.9)] text-center">
+          <div className="win-modal relative w-full max-w-md overflow-hidden rounded-[1.5rem] border border-white/15 bg-[linear-gradient(180deg,rgba(18,18,18,0.98),rgba(8,8,8,0.98))] p-5 text-center shadow-[0_30px_120px_rgba(0,0,0,0.9)] sm:rounded-[2rem] sm:p-6">
             <p className="text-[10px] uppercase tracking-[0.8em] text-white/30">RESULT</p>
             <h2 className="mt-2 text-4xl font-black tracking-tight text-white/90 sm:text-5xl">Push</h2>
             <p className="mt-2 text-sm text-white/45">It's a draw — your bet is returned.</p>
@@ -779,7 +953,7 @@ export default function App() {
 
       {showWinModal && round?.status === 'player-win' ? (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
-            <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[2rem] border border-amber-300/35 bg-[linear-gradient(180deg,rgba(10,10,10,0.98),rgba(0,0,0,0.98))] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.8)]">
+            <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-amber-300/35 bg-[linear-gradient(180deg,rgba(10,10,10,0.98),rgba(0,0,0,0.98))] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.8)] sm:rounded-[2rem] sm:p-6">
               <div className="absolute inset-0 sparkle-layer" />
               <div className="absolute -left-10 top-6 text-5xl coin-float">🪙</div>
               <div className="absolute right-6 top-8 text-4xl coin-float delay-1">🪙</div>
@@ -803,7 +977,7 @@ export default function App() {
 
       {showLoseModal && (round?.status === 'dealer-win' || round?.status === 'player-bust') ? (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 px-4 backdrop-blur-sm">
-          <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(4,4,4,0.99),rgba(0,0,0,0.99))] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.95)]">
+          <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(4,4,4,0.99),rgba(0,0,0,0.99))] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.95)] sm:rounded-[2rem] sm:p-6">
             <div className="absolute inset-0 opacity-10">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)]" />
             </div>
@@ -840,7 +1014,7 @@ export default function App() {
       <div className="absolute inset-0 bg-black/30" />
 
       {/* Coin display */}
-      <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-2 backdrop-blur-md">
+      <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full border border-white/20 bg-black/60 px-3 py-2 backdrop-blur-md sm:left-4 sm:top-4">
         <img src={coinArt.src} alt={coinArt.label} className="h-9 w-9 object-contain" />
         <div className="leading-tight">
           <p className="text-[9px] uppercase tracking-[0.35em] text-white/50">Coins</p>
@@ -849,47 +1023,101 @@ export default function App() {
       </div>
 
       {/* Controls hint */}
-      <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/15 bg-black/55 px-4 py-2 text-[10px] uppercase tracking-[0.4em] text-white/50 backdrop-blur-md">
-        WASD / Arrow Keys to move · E to enter table
+      <div className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/15 bg-black/55 px-4 py-2 text-[10px] uppercase tracking-[0.4em] text-white/50 backdrop-blur-md">
+        {isMobile ? 'Tap table or use controls' : 'WASD / Arrow Keys to move · E to enter table'}
       </div>
+
+      {isMobile ? (
+        <div className="absolute inset-x-0 bottom-3 z-20 flex items-end justify-between px-3">
+          <div
+            className="relative h-32 w-32 rounded-full border border-white/12 bg-black/75 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-md touch-none"
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              const rect = event.currentTarget.getBoundingClientRect();
+              const centerX = rect.left + rect.width / 2;
+              const centerY = rect.top + rect.height / 2;
+              setJoystickMove(event.clientX - centerX, event.clientY - centerY);
+            }}
+            onPointerMove={(event) => {
+              if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const centerX = rect.left + rect.width / 2;
+              const centerY = rect.top + rect.height / 2;
+              setJoystickMove(event.clientX - centerX, event.clientY - centerY);
+            }}
+            onPointerUp={clearJoystickMove}
+            onPointerCancel={clearJoystickMove}
+            onPointerLeave={(event) => {
+              if (event.currentTarget.hasPointerCapture(event.pointerId)) return;
+              clearJoystickMove();
+            }}
+          >
+            <div className="absolute inset-0 rounded-full border border-white/10 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),transparent_56%)]" />
+            <div className="absolute left-1/2 top-2 -translate-x-1/2 text-lg font-black text-white/80">↑</div>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-lg font-black text-white/80">↓</div>
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-lg font-black text-white/80">←</div>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-lg font-black text-white/80">→</div>
+            <div
+              className="absolute left-1/2 top-1/2 h-12 w-12 rounded-full border border-white/20 bg-black/60 shadow-[0_0_0_1px_rgba(255,255,255,0.05),0_8px_20px_rgba(0,0,0,0.35)] transition-transform duration-75"
+              style={{
+                transform: `translate(-50%, -50%) translate(${joystick.x}px, ${joystick.y}px)`,
+              }}
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={enterNearbyTable}
+            className="mb-2 h-20 w-20 rounded-full border border-emerald-300/30 bg-black/80 text-[11px] font-bold uppercase tracking-[0.35em] text-emerald-100 shadow-[0_16px_40px_rgba(0,0,0,0.45)] backdrop-blur-md active:scale-95"
+          >
+            E
+          </button>
+        </div>
+      ) : null}
 
       {/* World container */}
       <div className="relative h-screen w-full">
         {/* Table zones — Easy (left) */}
-        <div
+        <button
+          type="button"
           className="absolute"
+          onClick={() => setActiveTable('easy')}
           style={{ left: `${tableZones.easy.x}%`, top: `${tableZones.easy.y}%`, transform: 'translate(-50%, -50%)' }}
         >
           <img
             src={tableLeft}
             alt="Easy table"
-            className="w-40 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)]"
+            className="w-32 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)] sm:w-44"
           />
-        </div>
+        </button>
 
         {/* Table zones — Moderate (right) */}
-        <div
+        <button
+          type="button"
           className="absolute"
+          onClick={() => setActiveTable('moderate')}
           style={{ left: `${tableZones.moderate.x}%`, top: `${tableZones.moderate.y}%`, transform: 'translate(-50%, -50%)' }}
         >
           <img
             src={tableRight}
             alt="Moderate table"
-            className="w-40 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)]"
+            className="w-32 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)] sm:w-44"
           />
-        </div>
+        </button>
 
         {/* Table zones — Hard (center bottom) */}
-        <div
+        <button
+          type="button"
           className="absolute"
+          onClick={() => setActiveTable('hard')}
           style={{ left: `${tableZones.hard.x}%`, top: `${tableZones.hard.y}%`, transform: 'translate(-50%, -50%)' }}
         >
           <img
             src={tableFront}
             alt="Hard table"
-            className="w-44 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)]"
+            className="w-36 select-none object-contain drop-shadow-[0_12px_24px_rgba(0,0,0,0.55)] sm:w-48"
           />
-        </div>
+        </button>
 
         {/* Nearby table prompt */}
         {nearbyTable && (
@@ -908,7 +1136,7 @@ export default function App() {
           className="absolute z-10"
           style={{ left: `${position.x}%`, top: `${position.y}%`, transform: 'translate(-50%, -50%)' }}
         >
-          <div className={`spawn-avatar relative ${isWalking ? 'walking' : ''}`}>
+          <div className={`spawn-avatar relative h-28 w-28 sm:h-32 sm:w-32 ${isWalking ? 'walking' : ''}`}>
             <img
               src={
                 activeMove === 'up'
@@ -920,7 +1148,7 @@ export default function App() {
                       : standFront
               }
               alt="Player character"
-              className={`w-20 select-none object-contain drop-shadow-[0_8px_24px_rgba(0,0,0,0.8)] sm:w-24 ${direction === 'left' ? 'scale-x-[-1]' : ''}`}
+              className={`h-full w-full select-none object-contain drop-shadow-[0_8px_24px_rgba(0,0,0,0.8)] ${direction === 'left' ? 'scale-x-[-1]' : ''}`}
             />
           </div>
         </div>
