@@ -22,12 +22,16 @@ img {
 }
 
 .spawn-avatar {
-  animation: spawn-rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both,
-    float-idle 4s ease-in-out 900ms infinite;
   transform-origin: center bottom;
+  animation: float-idle 4s ease-in-out infinite;
 }
 
-.walking {
+.spawn-avatar.spawning {
+  animation: spawn-rise 900ms cubic-bezier(0.16, 1, 0.3, 1) both,
+    float-idle 4s ease-in-out 900ms infinite;
+}
+
+.spawn-avatar.walking {
   animation: none;
 }
 

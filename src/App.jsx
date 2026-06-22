@@ -251,6 +251,7 @@ export default function App() {
   const [direction, setDirection] = useState('right');
   const [position, setPosition] = useState({ x: 50.5, y: 26 });
   const [isWalking, setIsWalking] = useState(false);
+  const [isSpawning, setIsSpawning] = useState(true);
   const [pressedKeys, setPressedKeys] = useState({ left: false, right: false, up: false, down: false });
   const [actionMessage, setActionMessage] = useState('');
   const [activeTable, setActiveTable] = useState(null);
@@ -311,6 +312,13 @@ export default function App() {
   useEffect(() => {
     nearbyTableRef.current = getNearbyTable(position);
   }, [position]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsSpawning(false);
+    }, 900);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia('(max-width: 768px)');
@@ -1314,15 +1322,15 @@ export default function App() {
         </section>
 
       {round?.status === 'push' ? (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/50 px-4 backdrop-blur-sm gap-5">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/50 px-4 backdrop-blur-sm gap-4">
           {blackjackBannerNode}
-          <div className="win-modal relative w-full max-w-md overflow-hidden rounded-[1.5rem] border border-white/15 bg-[linear-gradient(180deg,rgba(18,18,18,0.98),rgba(8,8,8,0.98))] p-5 text-center shadow-[0_30px_120px_rgba(0,0,0,0.9)] sm:rounded-[2rem] sm:p-6">
-            <p className="text-[10px] uppercase tracking-[0.8em] text-white/30">RESULT</p>
-            <h2 className="mt-2 text-4xl font-black tracking-tight text-white/90 sm:text-5xl">Push</h2>
-            <p className="mt-2 text-sm text-white/45">It's a draw — your bet is returned.</p>
-            <div className="mt-5 rounded-[1.25rem] border border-white/10 bg-black/40 px-5 py-4">
-              <span className="block text-xs uppercase tracking-[0.55em] text-white/30">Returned</span>
-              <span className="mt-2 block text-4xl font-black tabular-nums text-white/80 sm:text-5xl">
+          <div className="win-modal relative w-full max-w-sm sm:max-w-md overflow-hidden rounded-[1.5rem] border border-white/15 bg-[linear-gradient(180deg,rgba(18,18,18,0.98),rgba(8,8,8,0.98))] p-4 sm:p-6 text-center shadow-[0_30px_120px_rgba(0,0,0,0.9)] sm:rounded-[2rem]">
+            <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.8em] text-white/30">RESULT</p>
+            <h2 className="mt-1 sm:mt-2 text-3xl font-black tracking-tight text-white/90 sm:text-5xl">Push</h2>
+            <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-white/45">It's a draw — your bet is returned.</p>
+            <div className="mt-4 sm:mt-5 rounded-[1.25rem] border border-white/10 bg-black/40 px-4 py-3 sm:px-5 sm:py-4">
+              <span className="block text-[10px] sm:text-xs uppercase tracking-[0.55em] text-white/30">Returned</span>
+              <span className="mt-1 sm:mt-2 block text-3xl font-black tabular-nums text-white/80 sm:text-5xl">
                 {(round.wager ?? 0).toLocaleString()}
               </span>
             </div>
@@ -1331,22 +1339,22 @@ export default function App() {
       ) : null}
 
       {showWinModal && round?.status === 'player-win' ? (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/55 px-4 backdrop-blur-sm gap-5">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/55 px-4 backdrop-blur-sm gap-4">
             {blackjackBannerNode}
-            <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-amber-300/35 bg-[linear-gradient(180deg,rgba(10,10,10,0.98),rgba(0,0,0,0.98))] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.8)] sm:rounded-[2rem] sm:p-6">
+            <div className="win-modal relative w-full max-w-sm sm:max-w-md overflow-hidden rounded-[1.5rem] border border-amber-300/35 bg-[linear-gradient(180deg,rgba(10,10,10,0.98),rgba(0,0,0,0.98))] p-3.5 sm:p-5 shadow-[0_30px_120px_rgba(0,0,0,0.8)] sm:rounded-[2rem]">
               <div className="absolute inset-0 sparkle-layer" />
-              <div className="absolute -left-10 top-6 text-5xl coin-float">🪙</div>
-              <div className="absolute right-6 top-8 text-4xl coin-float delay-1">🪙</div>
-              <div className="absolute bottom-8 left-10 text-3xl coin-float delay-2">🪙</div>
-              <div className="absolute bottom-10 right-10 text-5xl coin-float delay-3">🪙</div>
+              <div className="absolute left-2.5 sm:-left-8 top-6 text-3xl sm:text-5xl coin-float">🪙</div>
+              <div className="absolute right-3.5 sm:right-6 top-8 text-2xl sm:text-4xl coin-float delay-1">🪙</div>
+              <div className="absolute bottom-8 left-6 sm:left-10 text-xl sm:text-3xl coin-float delay-2">🪙</div>
+              <div className="absolute bottom-10 right-6 sm:right-10 text-3xl sm:text-5xl coin-float delay-3">🪙</div>
 
-              <div className="relative rounded-[1.5rem] border border-amber-200/70 bg-[linear-gradient(180deg,rgba(255,215,120,0.08),rgba(0,0,0,0.25))] p-5 text-center">
-                <p className="text-[10px] uppercase tracking-[0.8em] text-amber-200/80">WIN</p>
-                <h2 className="mt-2 text-4xl font-black tracking-tight text-amber-50 sm:text-5xl">Congratulations</h2>
-                <p className="mt-2 text-sm text-amber-100/75">You won</p>
-                <div className="mt-5 rounded-[1.25rem] border-2 border-amber-300/70 bg-black/55 px-5 py-4">
-                  <span className="block text-xs uppercase tracking-[0.55em] text-amber-200/70">Payout</span>
-                  <span className="mt-2 block text-5xl font-black tabular-nums text-amber-50 sm:text-6xl">
+              <div className="relative rounded-[1.5rem] border border-amber-200/70 bg-[linear-gradient(180deg,rgba(255,215,120,0.08),rgba(0,0,0,0.25))] p-4 sm:p-5 text-center">
+                <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.8em] text-amber-200/80">WIN</p>
+                <h2 className="mt-1 sm:mt-2 text-2xl sm:text-4xl font-black tracking-tight text-amber-50">Congratulations</h2>
+                <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-amber-100/75">You won</p>
+                <div className="mt-4 sm:mt-5 rounded-[1.25rem] border-2 border-amber-300/70 bg-black/55 px-4 py-3 sm:px-5 sm:py-4">
+                  <span className="block text-[10px] sm:text-xs uppercase tracking-[0.55em] text-amber-200/70">Payout</span>
+                  <span className="mt-1 sm:mt-2 block text-3xl sm:text-5xl font-black tabular-nums text-amber-50">
                     {winCount.toLocaleString()}
                   </span>
                 </div>
@@ -1356,20 +1364,20 @@ export default function App() {
       ) : null}
 
       {showLoseModal && (round?.status === 'dealer-win' || round?.status === 'player-bust') ? (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/65 px-4 backdrop-blur-sm gap-5">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/65 px-4 backdrop-blur-sm gap-4">
           {blackjackBannerNode}
-          <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(4,4,4,0.99),rgba(0,0,0,0.99))] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.95)] sm:rounded-[2rem] sm:p-6">
+          <div className="win-modal relative w-full max-w-sm sm:max-w-md overflow-hidden rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(4,4,4,0.99),rgba(0,0,0,0.99))] p-3.5 sm:p-5 shadow-[0_30px_120px_rgba(0,0,0,0.95)] sm:rounded-[2rem]">
             <div className="absolute inset-0 opacity-10">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)]" />
             </div>
 
-            <div className="relative rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.28))] p-5 text-center">
-              <p className="text-[10px] uppercase tracking-[0.8em] text-white/30">LOSE</p>
-              <h2 className="mt-2 text-4xl font-black tracking-tight text-white/92 sm:text-5xl">Round Lost</h2>
-              <p className="mt-2 text-sm text-white/55">You lost</p>
-              <div className="mt-5 rounded-[1.25rem] border border-white/10 bg-black/65 px-5 py-4">
-                <span className="block text-xs uppercase tracking-[0.55em] text-white/30">Loss</span>
-                <span className="mt-2 block text-5xl font-black tabular-nums text-white/90 sm:text-6xl">
+            <div className="relative rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(0,0,0,0.28))] p-4 sm:p-5 text-center">
+              <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.8em] text-white/30">LOSE</p>
+              <h2 className="mt-1 sm:mt-2 text-2xl sm:text-4xl font-black tracking-tight text-white/92">Round Lost</h2>
+              <p className="mt-1 sm:mt-2 text-xs sm:text-sm text-white/55">You lost</p>
+              <div className="mt-4 sm:mt-5 rounded-[1.25rem] border border-white/10 bg-black/65 px-4 py-3 sm:px-5 sm:py-4">
+                <span className="block text-[10px] sm:text-xs uppercase tracking-[0.55em] text-white/30">Loss</span>
+                <span className="mt-1 sm:mt-2 block text-3xl sm:text-5xl font-black tabular-nums text-white/90">
                   -{loseCount.toLocaleString()}
                 </span>
               </div>
@@ -1517,7 +1525,7 @@ export default function App() {
           className="absolute z-10"
           style={{ left: `${position.x}%`, top: `${position.y}%`, transform: 'translate(-50%, -50%)' }}
         >
-          <div className={`spawn-avatar relative h-44 w-44 sm:h-56 sm:w-56 ${isWalking ? 'walking' : ''}`}>
+          <div className={`spawn-avatar relative h-44 w-44 sm:h-56 sm:w-56 ${isSpawning ? 'spawning' : ''} ${isWalking ? 'walking' : ''}`}>
             <img
               src={
                 activeMove === 'up'
