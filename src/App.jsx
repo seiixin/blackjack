@@ -163,16 +163,18 @@ function suitGlyph(suit) {
 
 function createRound(difficulty) {
   const deck = createDeck();
-  const playerHand = [deck.pop(), deck.pop()];
-  const dealerHand = [deck.pop(), deck.pop()];
 
   return {
     difficulty,
     deck,
-    playerHand,
-    dealerHand,
-    status: 'player-turn',
-    message: 'Choose Hit or Stand.',
+    playerHand: [],
+    dealerHand: [],
+    dealerHoleCard: null,
+    dealerHoleRevealed: false,
+    phase: 'dealing',
+    dealStep: 0,
+    status: 'dealing',
+    message: 'Dealing cards...',
     wager: null,
     hasDoubled: false,
   };
@@ -220,6 +222,24 @@ function CardFace({ card }) {
   );
 }
 
+function CardBack() {
+  return (
+    <img
+      src="https://raw.githubusercontent.com/hayeah/playing-cards-assets/master/png/back.png"
+      alt="Card back"
+      className="h-full w-full object-contain p-1.5"
+      draggable="false"
+    />
+  );
+}
+
+function cardNumericValue(card) {
+  if (!card) return 0;
+  if (card.rank === 'A') return 11;
+  if (['10', 'J', 'Q', 'K'].includes(card.rank)) return 10;
+  return Number(card.rank);
+}
+
 export default function App() {
   const walkRightFrames = useMemo(
     () => [walkRight1, walkRight2, walkRight3, walkRight4, walkRight5, walkRight6],
@@ -244,9 +264,14 @@ export default function App() {
   const [loseCount, setLoseCount] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
   const [joystick, setJoystick] = useState({ x: 0, y: 0, active: false });
+  // 5-frame peek: 0=idle, 1=lift, 2=peek(full open), 3=return, 4=flat/reset
+  const [peekFrame, setPeekFrame] = useState(0);
   const positionRef = useRef(position);
   const nearbyTableRef = useRef(null);
   const coinsRef = useRef(10000000);
+  const dealSequenceRef = useRef(null);
+  const dealerActionRef = useRef(null);
+  const dealerPeekRef = useRef(null);
   const walkRightImage = useSpriteFrames(walkRightFrames, 120);
   const walkUpImage = useSpriteFrames(walkUpFrames, 120);
   const walkDownImage = useSpriteFrames(walkDownFrames, 120);
@@ -346,6 +371,188 @@ export default function App() {
 
     return () => window.clearInterval(timer);
   }, [round?.status, round?.wager]);
+
+  const clearRoundTimers = () => {
+    if (dealSequenceRef.current) window.clearTimeout(dealSequenceRef.current);
+    if (dealerActionRef.current) window.clearTimeout(dealerActionRef.current);
+    if (dealerPeekRef.current) window.clearTimeout(dealerPeekRef.current);
+    dealSequenceRef.current = null;
+    dealerActionRef.current = null;
+    dealerPeekRef.current = null;
+  };
+
+  const resolveDealerTurn = () => {
+    setRound((currentRound) => {
+      if (!currentRound) return currentRound;
+
+      const nextDeck = [...currentRound.deck];
+      const nextDealerHand = [...currentRound.dealerHand];
+      while (handValue(nextDealerHand) < 17) {
+        nextDealerHand.push(nextDeck.pop());
+      }
+
+      const dealerTotal = handValue(nextDealerHand);
+      const playerTotal = handValue(currentRound.playerHand);
+      const wager = currentRound.wager ?? 0;
+
+      if (dealerTotal > 21 || playerTotal > dealerTotal) {
+        coinsRef.current += wager * 2;
+        setCoins((currentCoins) => currentCoins + wager * 2);
+        scheduleTableReset(setTablePhase, setRound, setBetInput);
+        return {
+          ...currentRound,
+          deck: nextDeck,
+          dealerHand: nextDealerHand,
+          dealerHoleRevealed: true,
+          phase: 'round-over',
+          status: 'player-win',
+          message: 'You win!',
+        };
+      }
+
+      if (playerTotal < dealerTotal) {
+        scheduleTableReset(setTablePhase, setRound, setBetInput);
+        return {
+          ...currentRound,
+          deck: nextDeck,
+          dealerHand: nextDealerHand,
+          dealerHoleRevealed: true,
+          phase: 'round-over',
+          status: 'dealer-win',
+          message: 'Dealer wins.',
+        };
+      }
+
+      coinsRef.current += wager;
+      setCoins((currentCoins) => currentCoins + wager);
+      scheduleTableReset(setTablePhase, setRound, setBetInput);
+      return {
+        ...currentRound,
+        deck: nextDeck,
+        dealerHand: nextDealerHand,
+        dealerHoleRevealed: true,
+        phase: 'round-over',
+        status: 'push',
+        message: 'Push.',
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (!round) return undefined;
+
+    // Only drive the dealing sequence here — peek and dealer-turn
+    // are triggered as chained timeouts from within, not separate effect branches.
+    if (round.phase === 'dealing') {
+      const t = window.setTimeout(() => {
+        // Compute next state outside updater so we can schedule side-effects cleanly
+        setRound((currentRound) => {
+          if (!currentRound || currentRound.phase !== 'dealing') return currentRound;
+
+          const nextDeck = [...currentRound.deck];
+          const nextPlayerHand = [...currentRound.playerHand];
+          const nextDealerHand = [...currentRound.dealerHand];
+
+          switch (currentRound.dealStep) {
+            case 0: nextPlayerHand.push(nextDeck.pop()); break;
+            case 1: nextDealerHand.push(nextDeck.pop()); break;
+            case 2: nextPlayerHand.push(nextDeck.pop()); break;
+            case 3: nextDealerHand.push(nextDeck.pop()); break;
+            default: break;
+          }
+
+          const nextDealStep = currentRound.dealStep + 1;
+          const isDone = nextDealStep >= 4;
+
+          return {
+            ...currentRound,
+            deck: nextDeck,
+            playerHand: nextPlayerHand,
+            dealerHand: nextDealerHand,
+            dealStep: nextDealStep,
+            phase: isDone ? 'dealer-peek' : 'dealing',
+            status: isDone ? 'dealer-peek' : 'dealing',
+            message: isDone ? 'Dealer checks the hole card...' : 'Dealing cards...',
+            // stash upcard so peek handler can read it without stale closure
+            _peekUpcard: isDone ? nextDealerHand[0] : currentRound._peekUpcard,
+          };
+        });
+      }, 500);
+
+      dealSequenceRef.current = t;
+    }
+
+    if (round.phase === 'dealer-peek') {
+      // Use the stashed upcard from the dealing step — avoids stale closure on dealerHand[0]
+      const upcard = round._peekUpcard ?? round.dealerHand[0];
+      const peekNeeded = upcard?.rank === 'A' || ['10', 'J', 'Q', 'K'].includes(upcard?.rank);
+
+      if (!peekNeeded) {
+        dealerPeekRef.current = window.setTimeout(() => {
+          setRound((r) => r ? { ...r, phase: 'player-turn', status: 'player-turn', message: 'Choose Hit or Stand.' } : r);
+        }, 300);
+      } else {
+        // 5-frame sequence: frame advances every 130ms
+        // F1(0)=idle → F2(1)=lift → F3(2)=peek → check BJ → F4(3)=return → F5(4→0)=flat
+        const FRAME_MS = 130;
+
+        dealerPeekRef.current = window.setTimeout(() => {
+          // Frame 2 — lift
+          setPeekFrame(1);
+
+          window.setTimeout(() => {
+            // Frame 3 — full open, check blackjack here
+            setPeekFrame(2);
+
+            window.setTimeout(() => {
+              setRound((r) => {
+                if (!r) return r;
+                const dTotal = handValue(r.dealerHand);
+                const pTotal = handValue(r.playerHand);
+
+                if (dTotal === 21) {
+                  // Blackjack — halt at frame 3, flip whole card, end round
+                  setPeekFrame(0);
+                  const status = pTotal === 21 ? 'push' : 'dealer-win';
+                  const message = pTotal === 21 ? 'Push — both Blackjack.' : 'Dealer Blackjack!';
+                  scheduleTableReset(setTablePhase, setRound, setBetInput);
+                  return { ...r, dealerHoleRevealed: true, phase: 'round-over', status, message };
+                }
+
+                // No blackjack — continue animation: frame 4 then frame 5
+                window.setTimeout(() => {
+                  setPeekFrame(3); // return
+                  window.setTimeout(() => {
+                    setPeekFrame(0); // flat/reset
+                    window.setTimeout(() => {
+                      setRound((r2) => r2 ? {
+                        ...r2,
+                        phase: 'player-turn',
+                        status: 'player-turn',
+                        message: 'Choose Hit or Stand.',
+                      } : r2);
+                    }, FRAME_MS);
+                  }, FRAME_MS);
+                }, FRAME_MS * 3); // hold peek open 3 frames
+
+                return r; // state unchanged while animation plays out
+              });
+            }, FRAME_MS * 3); // hold at frame 3 for 3 frames before BJ check
+          }, FRAME_MS);
+        }, 350); // small delay after last card is dealt
+      }
+    }
+
+    if (round.phase === 'dealer-turn') {
+      dealerActionRef.current = window.setTimeout(resolveDealerTurn, 650);
+    }
+
+    return () => {
+      if (dealSequenceRef.current) window.clearTimeout(dealSequenceRef.current);
+      if (dealerActionRef.current) window.clearTimeout(dealerActionRef.current);
+      if (dealerPeekRef.current) window.clearTimeout(dealerPeekRef.current);
+    };
+  }, [round?.phase, round?.dealStep]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -461,6 +668,8 @@ export default function App() {
     coinsRef.current = currentCoins - wager;
     setCoins(currentCoins - wager);
     setTablePhase('game');
+    clearRoundTimers();
+    setPeekFrame(0);
     setRound({
       ...createRound(activeTable),
       wager,
@@ -497,44 +706,12 @@ export default function App() {
   const stand = () => {
     setRound((currentRound) => {
       if (!currentRound || currentRound.status !== 'player-turn') return currentRound;
-
-      const nextDeck = [...currentRound.deck];
-      const nextDealerHand = [...currentRound.dealerHand];
-      const dealerStand = difficultyMeta[currentRound.difficulty].dealerStand;
-      let dealerTotal = handValue(nextDealerHand);
-
-      while (dealerTotal < dealerStand) {
-        nextDealerHand.push(nextDeck.pop());
-        dealerTotal = handValue(nextDealerHand);
-      }
-
-      const playerTotal = handValue(currentRound.playerHand);
-      let message = 'Push.';
-      let status = 'push';
-      const wager = currentRound.wager ?? 0;
-
-      if (dealerTotal > 21 || playerTotal > dealerTotal) {
-        message = 'You win!';
-        status = 'player-win';
-        coinsRef.current += wager * 2;
-        setCoins((currentCoins) => currentCoins + wager * 2);
-        scheduleTableReset(setTablePhase, setRound, setBetInput);
-      } else if (playerTotal < dealerTotal) {
-        message = 'Dealer wins.';
-        status = 'dealer-win';
-        scheduleTableReset(setTablePhase, setRound, setBetInput);
-      } else {
-        coinsRef.current += wager;
-        setCoins((currentCoins) => currentCoins + wager);
-        scheduleTableReset(setTablePhase, setRound, setBetInput);
-      }
-
       return {
         ...currentRound,
-        deck: nextDeck,
-        dealerHand: nextDealerHand,
-        status,
-        message,
+        phase: 'dealer-turn',
+        status: 'dealer-turn',
+        dealerHoleRevealed: true,
+        message: 'Dealer plays.',
       };
     });
   };
@@ -578,6 +755,9 @@ export default function App() {
         playerHand: nextPlayerHand,
         wager: nextWager,
         hasDoubled: true,
+        phase: 'dealer-turn',
+        status: 'dealer-turn',
+        dealerHoleRevealed: true,
         message: `Double accepted. Bet is now ${nextWager.toLocaleString()}.`,
       };
     });
@@ -636,6 +816,11 @@ export default function App() {
 
   if (activeTable && tableMeta) {
     const playerTotal = round ? handValue(round.playerHand) : 0;
+    const dealerVisibleTotal = round
+      ? round.dealerHoleRevealed
+        ? handValue(round.dealerHand)
+        : handValue(round.dealerHand.slice(0, 1))
+      : 0;
     const dealerTotal = round ? handValue(round.dealerHand) : 0;
     const coinArt = getCoinArt(coins);
 
@@ -683,21 +868,98 @@ export default function App() {
                   {/* Dealer cards — dead center */}
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="flex flex-wrap justify-center gap-2 px-3">
-                      {round.dealerHand.map((card, i) => (
-                        <div
-                          key={i}
-                          className="card-deal-down h-24 w-16 overflow-hidden rounded-xl bg-white shadow-[0_8px_24px_rgba(0,0,0,0.6)] sm:h-28 sm:w-20"
-                          style={{ animationDelay: `${i * 120}ms` }}
-                        >
-                          <CardFace card={card} />
-                        </div>
-                      ))}
+                      {round.dealerHand.map((card, i) => {
+                        const isSecondCard = i === 1;
+                        const isHidden = isSecondCard && !round.dealerHoleRevealed;
+                        const isRed = card.suit === 'H' || card.suit === 'D';
+
+                        return (
+                          <div
+                            key={i}
+                            className={`relative h-24 w-16 sm:h-28 sm:w-20 ${isHidden ? '' : 'card-deal-down overflow-hidden rounded-xl bg-white shadow-[0_8px_24px_rgba(0,0,0,0.6)]'}`}
+                            style={{ animationDelay: `${i * 120}ms` }}
+                          >
+                            {isHidden ? (
+                              /*
+                               * 2D Pinch/Peek — layered clip-path approach:
+                               *
+                               * Layer 0 (bottom): Card Front — rank+suit visible at top-left corner
+                               * Layer 1 (mid):    Card Back clipped to exclude top-left corner (the "body" piece)
+                               * Layer 2 (top):    Card Back clipped to top-left corner only (the "flap" piece)
+                               *                   → this piece transforms: skewX + rotateZ + translate on peek
+                               *
+                               * Idle:   flap sits flush, fully covers the front corner → card value hidden
+                               * Peek:   flap lifts via skew+rotate+translate → gap opens → front corner visible
+                               * Unpeek: reverses back in 300ms
+                               */
+                              <div className="relative h-full w-full rounded-xl shadow-[0_8px_24px_rgba(0,0,0,0.6)] overflow-visible">
+
+                                {/* Layer 0 — Card Front underneath (rank+suit visible thru the gap) */}
+                                <div className="absolute inset-0 overflow-hidden rounded-xl bg-white">
+                                  <CardFace card={card} />
+                                </div>
+
+                                {/* Layer 1 — Card Back body: everything EXCEPT top-left corner */}
+                                <div
+                                  className="absolute inset-0 overflow-hidden rounded-xl"
+                                  style={{
+                                    clipPath: peekFrame === 0
+                                      ? 'polygon(38% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 42%)'
+                                      : peekFrame === 1
+                                        ? 'polygon(30% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 34%)'
+                                        : peekFrame === 2
+                                          ? 'polygon(22% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 26%)'
+                                          : 'polygon(30% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 34%)',
+                                    transition: 'clip-path 0.13s ease',
+                                  }}
+                                >
+                                  <CardBack />
+                                </div>
+
+                                {/* Layer 2 — Card Back corner flap: top-left triangle only
+                                    Moves INWARD (positive translate) toward card center, not outward */}
+                                <div
+                                  className="absolute inset-0 overflow-hidden rounded-tl-xl"
+                                  style={{
+                                    clipPath: 'polygon(0% 0%, 40% 0%, 0% 44%)',
+                                    transformOrigin: '40% 44%',
+                                    transition: peekFrame > 0
+                                      ? 'transform 0.13s ease-out, filter 0.13s ease-out'
+                                      : 'transform 0.13s ease-in, filter 0.13s ease-in',
+                                    transform: peekFrame === 0
+                                      ? 'skewX(0deg) rotateZ(0deg) translate(0px, 0px)'
+                                      : peekFrame === 1
+                                        ? 'skewX(-5deg) rotateZ(3deg) translate(4px, 5px)'
+                                        : peekFrame === 2
+                                          ? 'skewX(-10deg) rotateZ(6deg) translate(8px, 10px)'
+                                          : 'skewX(-5deg) rotateZ(3deg) translate(4px, 5px)',
+                                    filter: peekFrame === 0
+                                      ? 'none'
+                                      : peekFrame === 2
+                                        ? 'drop-shadow(2px 6px 10px rgba(0,0,0,0.55))'
+                                        : 'drop-shadow(1px 4px 6px rgba(0,0,0,0.4))',
+                                  }}
+                                >
+                                  <CardBack />
+                                </div>
+
+                              </div>
+                            ) : (
+                              <div className="h-full w-full overflow-hidden rounded-xl">
+                                <CardFace card={card} />
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2 xl:hidden">
                     <div className="rounded-2xl border border-white/12 bg-black/55 px-3 py-2 backdrop-blur-md">
                       <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">Dealer</p>
-                      <p className="mt-1 text-sm font-bold tabular-nums text-white">{dealerTotal}</p>
+                      <p className="mt-1 text-sm font-bold tabular-nums text-white">
+                        {dealerVisibleTotal}{!round?.dealerHoleRevealed && round?.dealerHand.length > 1 ? '+' : ''}
+                      </p>
                     </div>
                     <div className="rounded-2xl border border-white/12 bg-black/55 px-3 py-2 backdrop-blur-md">
                       <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">You</p>
@@ -775,6 +1037,11 @@ export default function App() {
 
               {tablePhase === 'game' ? (
                 <div className="absolute inset-x-0 bottom-3 z-20 px-3 xl:hidden">
+                  {round?.message && round.status !== 'player-turn' ? (
+                    <div className="mx-auto mb-2 max-w-sm rounded-2xl border border-white/10 bg-black/70 px-3 py-2 text-center text-[10px] uppercase tracking-[0.35em] text-white/55 backdrop-blur-sm">
+                      {peekFrame > 0 ? '👁 Dealer Peek...' : round.message}
+                    </div>
+                  ) : null}
                   <div className="mx-auto grid max-w-sm grid-cols-3 gap-2">
                     <button
                       type="button"
@@ -875,7 +1142,9 @@ export default function App() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-2xl bg-white/5 border border-white/8 p-4 text-center">
                         <p className="text-[9px] uppercase tracking-[0.5em] text-white/30 mb-1">Dealer</p>
-                        <p className="text-4xl font-black tabular-nums text-white sm:text-5xl">{dealerTotal}</p>
+                        <p className="text-4xl font-black tabular-nums text-white sm:text-5xl">
+                          {dealerVisibleTotal}{!round?.dealerHoleRevealed && round?.dealerHand.length > 1 ? '+' : ''}
+                        </p>
                       </div>
                       <div className="rounded-2xl bg-white/5 border border-white/8 p-4 text-center">
                         <p className="text-[9px] uppercase tracking-[0.5em] text-white/30 mb-1">You</p>
@@ -885,7 +1154,7 @@ export default function App() {
 
                     {/* Status / message */}
                     <div className="rounded-2xl border border-dashed border-white/15 px-4 py-3 text-sm text-white/50 text-center">
-                      {round?.message ?? 'Deal cards to start the round.'}
+                      {peekFrame > 0 ? '👁  Dealer Peek...' : (round?.message ?? 'Deal cards to start the round.')}
                     </div>
 
                     {/* Wager indicator */}

@@ -28,7 +28,12 @@ img {
 }
 
 .walking {
-  animation-duration: 900ms, 1.2s;
+  animation: none;
+}
+
+/* Dealer hole card peek — 3D corner lift */
+.hole-card-wrap {
+  perspective: 400px;
 }
 
 .win-modal {
@@ -155,6 +160,26 @@ img {
 
 .card-deal-up {
   animation: card-deal-up 350ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes dealer-hole-peek {
+  0% {
+    transform: translateY(0) rotate(0deg) skewX(0deg);
+  }
+  35% {
+    transform: translateY(-2px) rotate(-3deg) skewX(-3deg);
+  }
+  70% {
+    transform: translateY(-1px) rotate(-2deg) skewX(-2deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg) skewX(0deg);
+  }
+}
+
+.dealer-hole-peek {
+  animation: dealer-hole-peek 520ms ease-in-out both;
+  transform-origin: left center;
 }
 
 @keyframes coin-pop {
