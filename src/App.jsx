@@ -385,17 +385,69 @@ export default function App() {
     setRound((currentRound) => {
       if (!currentRound) return currentRound;
 
-      const nextDeck = [...currentRound.deck];
-      const nextDealerHand = [...currentRound.dealerHand];
-      while (handValue(nextDealerHand) < 17) {
-        nextDealerHand.push(nextDeck.pop());
-      }
-
-      const dealerTotal = handValue(nextDealerHand);
+      const dealerStand = difficultyMeta[currentRound.difficulty]?.dealerStand ?? 17;
+      const dealerTotal = handValue(currentRound.dealerHand);
       const playerTotal = handValue(currentRound.playerHand);
       const wager = currentRound.wager ?? 0;
 
-      if (dealerTotal > 21 || playerTotal > dealerTotal) {
+      if (dealerTotal >= dealerStand) {
+        if (dealerTotal > 21 || playerTotal > dealerTotal) {
+          coinsRef.current += wager * 2;
+          setCoins((currentCoins) => currentCoins + wager * 2);
+          scheduleTableReset(setTablePhase, setRound, setBetInput);
+          return {
+            ...currentRound,
+            dealerHoleRevealed: true,
+            phase: 'round-over',
+            status: 'player-win',
+            message: `Dealer stands at ${dealerTotal}. You win!`,
+          };
+        }
+
+        if (playerTotal < dealerTotal) {
+          scheduleTableReset(setTablePhase, setRound, setBetInput);
+          return {
+            ...currentRound,
+            dealerHoleRevealed: true,
+            phase: 'round-over',
+            status: 'dealer-win',
+            message: `Dealer stands at ${dealerTotal}. Dealer wins.`,
+          };
+        }
+
+        coinsRef.current += wager;
+        setCoins((currentCoins) => currentCoins + wager);
+        scheduleTableReset(setTablePhase, setRound, setBetInput);
+        return {
+          ...currentRound,
+          dealerHoleRevealed: true,
+          phase: 'round-over',
+          status: 'push',
+          message: `Dealer stands at ${dealerTotal}. Push.`,
+        };
+      }
+
+      if (dealerTotal > 21) {
+        coinsRef.current += wager * 2;
+        setCoins((currentCoins) => currentCoins + wager * 2);
+        scheduleTableReset(setTablePhase, setRound, setBetInput);
+        return {
+          ...currentRound,
+          dealerHoleRevealed: true,
+          phase: 'round-over',
+          status: 'player-win',
+          message: `Dealer busts at ${dealerTotal}. You win!`,
+        };
+      }
+
+      const nextDeck = [...currentRound.deck];
+      const drawnCard = nextDeck.pop();
+      const nextDealerHand = [...currentRound.dealerHand, drawnCard];
+      const nextDealerTotal = handValue(nextDealerHand);
+      const isBust = nextDealerTotal > 21;
+      const isSatisfied = nextDealerTotal >= dealerStand;
+
+      if (isBust) {
         coinsRef.current += wager * 2;
         setCoins((currentCoins) => currentCoins + wager * 2);
         scheduleTableReset(setTablePhase, setRound, setBetInput);
@@ -406,34 +458,18 @@ export default function App() {
           dealerHoleRevealed: true,
           phase: 'round-over',
           status: 'player-win',
-          message: 'You win!',
+          message: `Dealer draws ${cardLabel(drawnCard)}. New dealerTotal=${nextDealerTotal}. Dealer busts.`,
         };
       }
 
-      if (playerTotal < dealerTotal) {
-        scheduleTableReset(setTablePhase, setRound, setBetInput);
-        return {
-          ...currentRound,
-          deck: nextDeck,
-          dealerHand: nextDealerHand,
-          dealerHoleRevealed: true,
-          phase: 'round-over',
-          status: 'dealer-win',
-          message: 'Dealer wins.',
-        };
-      }
-
-      coinsRef.current += wager;
-      setCoins((currentCoins) => currentCoins + wager);
-      scheduleTableReset(setTablePhase, setRound, setBetInput);
       return {
         ...currentRound,
         deck: nextDeck,
         dealerHand: nextDealerHand,
         dealerHoleRevealed: true,
-        phase: 'round-over',
-        status: 'push',
-        message: 'Push.',
+        phase: 'dealer-turn',
+        status: 'dealer-turn',
+        message: `Dealer draws ${cardLabel(drawnCard)}. New dealerTotal=${nextDealerTotal}.`,
       };
     });
   };
@@ -487,9 +523,31 @@ export default function App() {
       const upcard = round._peekUpcard ?? round.dealerHand[0];
       const peekNeeded = upcard?.rank === 'A' || ['10', 'J', 'Q', 'K'].includes(upcard?.rank);
 
+      const settlePlayerBlackjack = (state) => {
+        if (!state) return state;
+        const dealerTotal = handValue(state.dealerHand);
+        const playerTotal = handValue(state.playerHand);
+        if (state.playerHand.length === 2 && playerTotal === 21 && dealerTotal !== 21) {
+          scheduleTableReset(setTablePhase, setRound, setBetInput);
+          return {
+            ...state,
+            dealerHoleRevealed: true,
+            phase: 'round-over',
+            status: 'player-win',
+            message: 'Blackjack! You win.',
+          };
+        }
+        return state;
+      };
+
       if (!peekNeeded) {
         dealerPeekRef.current = window.setTimeout(() => {
-          setRound((r) => r ? { ...r, phase: 'player-turn', status: 'player-turn', message: 'Choose Hit or Stand.' } : r);
+          setRound((r) => {
+            const settled = settlePlayerBlackjack(r);
+            if (!settled) return settled;
+            if (settled.phase === 'round-over') return settled;
+            return { ...settled, phase: 'player-turn', status: 'player-turn', message: 'Choose Hit or Stand.' };
+          });
         }, 300);
       } else {
         // 5-frame sequence: frame advances every 130ms
@@ -525,12 +583,17 @@ export default function App() {
                   window.setTimeout(() => {
                     setPeekFrame(0); // flat/reset
                     window.setTimeout(() => {
-                      setRound((r2) => r2 ? {
-                        ...r2,
-                        phase: 'player-turn',
-                        status: 'player-turn',
-                        message: 'Choose Hit or Stand.',
-                      } : r2);
+                      setRound((r2) => {
+                        const settled = settlePlayerBlackjack(r2);
+                        if (!settled) return settled;
+                        if (settled.phase === 'round-over') return settled;
+                        return {
+                          ...settled,
+                          phase: 'player-turn',
+                          status: 'player-turn',
+                          message: 'Choose Hit or Stand.',
+                        };
+                      });
                     }, FRAME_MS);
                   }, FRAME_MS);
                 }, FRAME_MS * 3); // hold peek open 3 frames
@@ -706,12 +769,16 @@ export default function App() {
   const stand = () => {
     setRound((currentRound) => {
       if (!currentRound || currentRound.status !== 'player-turn') return currentRound;
+      const dealerTotal = handValue(currentRound.dealerHand);
+      const dealerStand = difficultyMeta[currentRound.difficulty]?.dealerStand ?? 17;
       return {
         ...currentRound,
         phase: 'dealer-turn',
         status: 'dealer-turn',
         dealerHoleRevealed: true,
-        message: 'Dealer plays.',
+        message: dealerTotal >= dealerStand
+          ? `Dealer shows the hole card. Dealer stands at ${dealerTotal}.`
+          : `Dealer shows the hole card. Dealer draws one card.`,
       };
     });
   };
