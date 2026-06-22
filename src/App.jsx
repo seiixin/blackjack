@@ -615,7 +615,7 @@ export default function App() {
       if (dealerActionRef.current) window.clearTimeout(dealerActionRef.current);
       if (dealerPeekRef.current) window.clearTimeout(dealerPeekRef.current);
     };
-  }, [round?.phase, round?.dealStep]);
+  }, [round?.phase, round?.dealStep, round?.dealerHand?.length, round?.dealerHoleRevealed]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -889,6 +889,47 @@ export default function App() {
         : handValue(round.dealerHand.slice(0, 1))
       : 0;
     const dealerTotal = round ? handValue(round.dealerHand) : 0;
+    const playerHasBJ = round && round.playerHand.length === 2 && handValue(round.playerHand) === 21;
+    const dealerHasBJ = round && round.dealerHand.length === 2 && handValue(round.dealerHand) === 21;
+    const showBlackjackBanner = round && round.dealerHoleRevealed && (playerHasBJ || dealerHasBJ);
+    const blackjackBannerNode = showBlackjackBanner ? (
+      <div className="z-[60] w-11/12 max-w-md rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-emerald-950 via-emerald-900 to-emerald-950 px-4 py-3 text-center shadow-[0_10px_30px_rgba(0,0,0,0.8),0_0_15px_rgba(245,158,11,0.25)] backdrop-blur-md blackjack-banner-anim">
+        <div className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-white sm:text-sm">
+          <span className="flex gap-1.5 text-base text-amber-400 sm:text-lg select-none">
+            <span>♦</span>
+            <span>♣</span>
+          </span>
+          <span className="flex-1 px-3 text-center font-bold tracking-wide">
+            {playerHasBJ && dealerHasBJ ? (
+              <>
+                YOU AND THE DEALER BOTH HAVE A{' '}
+                <span className="text-amber-300 font-black drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]">
+                  BLACKJACK!
+                </span>
+              </>
+            ) : playerHasBJ ? (
+              <>
+                YOU HAVE A{' '}
+                <span className="text-amber-300 font-black drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]">
+                  BLACKJACK!
+                </span>
+              </>
+            ) : (
+              <>
+                DEALER HAS A{' '}
+                <span className="text-amber-300 font-black drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]">
+                  BLACKJACK!
+                </span>
+              </>
+            )}
+          </span>
+          <span className="flex gap-1.5 text-base text-amber-400 sm:text-lg select-none">
+            <span>♣</span>
+            <span>♦</span>
+          </span>
+        </div>
+      </div>
+    ) : null;
     const coinArt = getCoinArt(coins);
 
     return (
@@ -931,6 +972,7 @@ export default function App() {
               {/* Cards — dealer dead center, player pinaka-baba */}
               {tablePhase === 'game' && round ? (
                 <div className="absolute inset-0">
+
 
                   {/* Dealer cards — dead center */}
                   <div className="absolute inset-0 flex items-center justify-center">
@@ -1114,7 +1156,7 @@ export default function App() {
                       type="button"
                       onClick={doubleBet}
                       disabled={!canDouble}
-                      className="rounded-2xl border border-white/15 bg-black px-2 py-3 text-xs font-semibold text-white/85 disabled:opacity-25"
+                      className="rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-emerald-950 via-emerald-800 to-emerald-950 px-2 py-3 text-xs font-bold text-white transition hover:brightness-110 active:scale-[0.98] disabled:opacity-25"
                     >
                       Double
                     </button>
@@ -1122,7 +1164,7 @@ export default function App() {
                       type="button"
                       onClick={hit}
                       disabled={round?.status !== 'player-turn'}
-                      className="rounded-2xl bg-black px-2 py-3 text-xs font-bold text-white disabled:opacity-30"
+                      className="rounded-2xl bg-gradient-to-r from-amber-700 via-yellow-400 to-amber-600 px-2 py-3 text-xs font-black text-black shadow-[0_4px_12px_rgba(245,158,11,0.25)] transition hover:brightness-110 active:scale-[0.98] disabled:opacity-30"
                     >
                       Hit
                     </button>
@@ -1130,7 +1172,7 @@ export default function App() {
                       type="button"
                       onClick={stand}
                       disabled={round?.status !== 'player-turn'}
-                      className="rounded-2xl border border-white/20 bg-black px-2 py-3 text-xs font-semibold text-white disabled:opacity-30"
+                      className="rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-emerald-950 via-emerald-800 to-emerald-950 px-2 py-3 text-xs font-bold text-white transition hover:brightness-110 active:scale-[0.98] disabled:opacity-30"
                     >
                       Stand
                     </button>
@@ -1238,7 +1280,7 @@ export default function App() {
                         type="button"
                         onClick={doubleBet}
                         disabled={!canDouble}
-                        className="flex flex-col items-center justify-center rounded-2xl border border-white/15 bg-black py-4 text-sm font-semibold text-white/80 transition hover:bg-black/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-25"
+                        className="flex flex-col items-center justify-center rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-emerald-950 via-emerald-800 to-emerald-950 py-4 text-sm font-bold text-white transition hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-25"
                       >
                         <span>Double</span>
                         {!canDouble && doubleCost > 0 ? (
@@ -1251,7 +1293,7 @@ export default function App() {
                         type="button"
                         onClick={hit}
                         disabled={round?.status !== 'player-turn'}
-                        className="rounded-2xl bg-black text-white font-bold text-sm py-4 transition hover:bg-black/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="rounded-2xl bg-gradient-to-r from-amber-700 via-yellow-400 to-amber-600 text-black font-black text-sm py-4 transition hover:brightness-110 active:scale-95 shadow-[0_4px_20px_rgba(245,158,11,0.25)] disabled:cursor-not-allowed disabled:opacity-30"
                       >
                         Hit
                       </button>
@@ -1259,7 +1301,7 @@ export default function App() {
                         type="button"
                         onClick={stand}
                         disabled={round?.status !== 'player-turn'}
-                        className="rounded-2xl border border-white/20 bg-black text-white font-semibold text-sm py-4 transition hover:bg-black/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
+                        className="rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-emerald-950 via-emerald-800 to-emerald-950 text-white font-bold text-sm py-4 transition hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                       >
                         Stand
                       </button>
@@ -1272,7 +1314,8 @@ export default function App() {
         </section>
 
       {round?.status === 'push' ? (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/50 px-4 backdrop-blur-sm gap-5">
+          {blackjackBannerNode}
           <div className="win-modal relative w-full max-w-md overflow-hidden rounded-[1.5rem] border border-white/15 bg-[linear-gradient(180deg,rgba(18,18,18,0.98),rgba(8,8,8,0.98))] p-5 text-center shadow-[0_30px_120px_rgba(0,0,0,0.9)] sm:rounded-[2rem] sm:p-6">
             <p className="text-[10px] uppercase tracking-[0.8em] text-white/30">RESULT</p>
             <h2 className="mt-2 text-4xl font-black tracking-tight text-white/90 sm:text-5xl">Push</h2>
@@ -1288,7 +1331,8 @@ export default function App() {
       ) : null}
 
       {showWinModal && round?.status === 'player-win' ? (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/55 px-4 backdrop-blur-sm gap-5">
+            {blackjackBannerNode}
             <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-amber-300/35 bg-[linear-gradient(180deg,rgba(10,10,10,0.98),rgba(0,0,0,0.98))] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.8)] sm:rounded-[2rem] sm:p-6">
               <div className="absolute inset-0 sparkle-layer" />
               <div className="absolute -left-10 top-6 text-5xl coin-float">🪙</div>
@@ -1312,7 +1356,8 @@ export default function App() {
       ) : null}
 
       {showLoseModal && (round?.status === 'dealer-win' || round?.status === 'player-bust') ? (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/65 px-4 backdrop-blur-sm">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/65 px-4 backdrop-blur-sm gap-5">
+          {blackjackBannerNode}
           <div className="win-modal relative w-full max-w-xl overflow-hidden rounded-[1.5rem] border border-white/10 bg-[linear-gradient(180deg,rgba(4,4,4,0.99),rgba(0,0,0,0.99))] p-5 shadow-[0_30px_120px_rgba(0,0,0,0.95)] sm:rounded-[2rem] sm:p-6">
             <div className="absolute inset-0 opacity-10">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_55%)]" />
