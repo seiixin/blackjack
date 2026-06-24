@@ -257,3 +257,20 @@ img {
              banner-pulse-glow 2s ease-in-out infinite 500ms;
 }
 
+/* Premium gradient red card with bronze-to-yellow gold gradient border (radial center-outwards) */
+.premium-gradient-red-card {
+  background: radial-gradient(circle, #b30f0f 0%, #3e0404 100%) padding-box,
+              radial-gradient(circle, #ffd700 0%, #8c501c 100%) border-box !important;
+  border: 2px solid transparent !important;
+}
+
+/* Hide scrollbar for Chrome, Safari, Opera, IE, Edge, and Firefox */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+

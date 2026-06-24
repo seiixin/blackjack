@@ -1072,13 +1072,13 @@ export default function App() {
                     </div>
                   </div>
                   <div className="absolute right-3 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2 xl:hidden">
-                    <div className="rounded-2xl border border-white/12 bg-black/55 px-3 py-2 backdrop-blur-md">
+                    <div className="rounded-2xl px-3 py-2 backdrop-blur-md premium-gradient-red-card">
                       <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">Dealer</p>
                       <p className="mt-1 text-sm font-bold tabular-nums text-white">
                         {dealerVisibleTotal}{!round?.dealerHoleRevealed && round?.dealerHand.length > 1 ? '+' : ''}
                       </p>
                     </div>
-                    <div className="rounded-2xl border border-white/12 bg-black/55 px-3 py-2 backdrop-blur-md">
+                    <div className="rounded-2xl px-3 py-2 backdrop-blur-md premium-gradient-red-card">
                       <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">You</p>
                       <p className="mt-1 text-sm font-bold tabular-nums text-white">{playerTotal}</p>
                     </div>
@@ -1101,8 +1101,8 @@ export default function App() {
               ) : null}
 
               <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3 xl:hidden">
-                <div className="min-w-0 rounded-2xl border border-white/12 bg-black/55 px-3 py-2 backdrop-blur-md">
-                  <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">Wallet</p>
+                <div className="min-w-0 rounded-2xl px-3 py-2 backdrop-blur-md premium-gradient-red-card">
+                  <p className="text-[8px] uppercase tracking-[0.45em] font-bold text-white">Wallet</p>
                   <p className="mt-1 text-sm font-bold tabular-nums text-white">{coins.toLocaleString()}</p>
                 </div>
               </div>
@@ -1110,15 +1110,15 @@ export default function App() {
               {tablePhase === 'bet' ? (
                 <div className="absolute inset-x-0 top-20 z-20 px-3 xl:hidden">
                   <div className="mx-auto flex w-full max-w-sm flex-col gap-3 rounded-[1.25rem] border border-white/12 bg-black/60 p-3 backdrop-blur-md">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 rounded-2xl px-3 py-2 premium-gradient-red-card">
                       <img src={coinArt.src} alt={coinArt.label} className="h-9 w-9 shrink-0 object-contain" />
                       <div className="min-w-0">
-                        <p className="text-[8px] uppercase tracking-[0.45em] text-white/35">Wallet</p>
+                        <p className="text-[8px] uppercase tracking-[0.45em] font-bold text-white">Wallet</p>
                         <p className="mt-1 text-sm font-bold tabular-nums text-white">{coins.toLocaleString()}</p>
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-white/8 bg-white/5 p-3">
-                      <p className="text-[9px] uppercase tracking-[0.5em] text-white/30">Your Bet</p>
+                    <div className="rounded-2xl p-3 premium-gradient-red-card">
+                      <p className="text-[9px] uppercase tracking-[0.5em] font-bold text-white">Your Bet</p>
                       <div className="mt-3 flex items-center gap-3">
                         <img key={betCoinArt.badge} src={betCoinArt.src} alt={betCoinArt.label} className="h-9 w-9 shrink-0 object-contain" />
                         <input
@@ -1130,21 +1130,21 @@ export default function App() {
                         />
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-white/8 bg-white/5 p-3">
-                      <p className="text-[9px] uppercase tracking-[0.5em] text-white/30">Coin Bank</p>
+                    <div className="rounded-2xl p-3 premium-gradient-red-card">
+                      <p className="text-[9px] uppercase tracking-[0.5em] font-bold text-white">Coin Bank</p>
                       <img src={coinsBankImage} alt="Coin tiers" className="mt-2 w-full object-contain" />
                     </div>
                     <button
                       type="button"
                       onClick={dealRound}
-                      className="w-full rounded-2xl bg-white py-3 text-sm font-bold text-black transition active:scale-[0.98]"
+                      className="w-full rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-emerald-950 via-emerald-800 to-emerald-950 py-3 text-sm font-bold text-white transition hover:brightness-110 active:scale-[0.98]"
                     >
                       Deal Round
                     </button>
                     <button
                       type="button"
                       onClick={() => { setActiveTable(null); setTablePhase('bet'); setRound(null); }}
-                      className="w-full rounded-2xl border border-white/15 bg-black/35 py-3 text-[10px] font-semibold uppercase tracking-[0.35em] text-white/70"
+                      className="w-full rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-blue-800 via-blue-950 to-blue-800 py-3 text-sm font-bold text-white transition hover:brightness-110 active:scale-[0.98]"
                     >
                       Leave
                     </button>
@@ -1172,7 +1172,7 @@ export default function App() {
                       type="button"
                       onClick={hit}
                       disabled={round?.status !== 'player-turn'}
-                      className="rounded-2xl bg-gradient-to-r from-amber-700 via-yellow-400 to-amber-600 px-2 py-3 text-xs font-black text-black shadow-[0_4px_12px_rgba(245,158,11,0.25)] transition hover:brightness-110 active:scale-[0.98] disabled:opacity-30"
+                      className="rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-violet-950 via-violet-800 to-violet-950 px-2 py-3 text-xs font-bold text-white transition hover:brightness-110 active:scale-[0.98] disabled:opacity-30"
                     >
                       Hit
                     </button>
@@ -1202,30 +1202,30 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => { setActiveTable(null); setTablePhase('bet'); setRound(null); }}
-                    className="shrink-0 rounded-full border border-white/15 bg-white/8 px-4 py-2 text-xs font-medium text-white/60 transition hover:bg-white/15 hover:text-white/90"
+                    className="shrink-0 rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-blue-800 via-blue-950 to-blue-800 px-4 py-2 text-xs font-bold text-white transition hover:brightness-110 active:scale-95"
                   >
                     Leave
                   </button>
                 </div>
 
                 {/* Wallet */}
-                <div className="mt-3 flex items-center gap-3 rounded-2xl border border-white/8 bg-white/5 px-3 py-2.5">
+                <div className="mt-3 flex items-center gap-3 rounded-2xl px-3 py-2.5 premium-gradient-red-card">
                   <img src={coinArt.src} alt={coinArt.label} className="h-9 w-9 object-contain sm:h-10 sm:w-10" />
                   <div>
-                    <p className="text-[9px] uppercase tracking-[0.4em] text-white/30">Wallet</p>
+                    <p className="text-[9px] uppercase tracking-[0.4em] font-bold text-white">Wallet</p>
                     <p className="text-xl font-bold tabular-nums text-white leading-tight">{coins.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
 
               {/* Body */}
-              <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5">
+              <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-5 no-scrollbar">
 
                 {tablePhase === 'bet' ? (
                   <>
                     {/* Bet input */}
-                    <div className="rounded-2xl bg-white/5 border border-white/8 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.5em] text-white/30 mb-3">Your Bet</p>
+                    <div className="rounded-2xl p-4 premium-gradient-red-card">
+                      <p className="text-[10px] uppercase tracking-[0.5em] font-bold text-white mb-3">Your Bet</p>
                       <div className="flex items-center gap-3">
                         <img key={betCoinArt.badge} src={betCoinArt.src} alt={betCoinArt.label} className="coin-pop h-14 w-14 shrink-0 object-contain" />
                         <input
@@ -1239,8 +1239,8 @@ export default function App() {
                     </div>
 
                     {/* Coin bank */}
-                    <div className="rounded-2xl bg-white/5 border border-white/8 p-4">
-                      <p className="text-[10px] uppercase tracking-[0.5em] text-white/30 mb-3">Coin Bank</p>
+                    <div className="rounded-2xl p-4 premium-gradient-red-card">
+                      <p className="text-[10px] uppercase tracking-[0.5em] font-bold text-white mb-3">Coin Bank</p>
                       <img src={coinsBankImage} alt="Coin tiers" className="w-full object-contain" />
                     </div>
 
@@ -1248,7 +1248,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={dealRound}
-                      className="w-full rounded-2xl bg-white text-black font-bold text-base py-4 transition hover:bg-white/90 active:scale-[0.98]"
+                      className="w-full rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-emerald-950 via-emerald-800 to-emerald-950 text-white font-bold text-base py-4 transition hover:brightness-110 active:scale-[0.98]"
                     >
                       Deal Round
                     </button>
@@ -1257,13 +1257,13 @@ export default function App() {
                   <>
                     {/* Score board */}
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="rounded-2xl bg-white/5 border border-white/8 p-4 text-center">
+                      <div className="rounded-2xl p-4 text-center premium-gradient-red-card">
                         <p className="text-[9px] uppercase tracking-[0.5em] text-white/30 mb-1">Dealer</p>
                         <p className="text-4xl font-black tabular-nums text-white sm:text-5xl">
                           {dealerVisibleTotal}{!round?.dealerHoleRevealed && round?.dealerHand.length > 1 ? '+' : ''}
                         </p>
                       </div>
-                      <div className="rounded-2xl bg-white/5 border border-white/8 p-4 text-center">
+                      <div className="rounded-2xl p-4 text-center premium-gradient-red-card">
                         <p className="text-[9px] uppercase tracking-[0.5em] text-white/30 mb-1">You</p>
                         <p className="text-4xl font-black tabular-nums text-white sm:text-5xl">{playerTotal}</p>
                       </div>
@@ -1276,8 +1276,8 @@ export default function App() {
 
                     {/* Wager indicator */}
                     {round?.wager ? (
-                      <div className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/8 px-4 py-3">
-                        <p className="text-[10px] uppercase tracking-[0.4em] text-white/30">Current Wager</p>
+                      <div className="flex items-center justify-between rounded-2xl px-4 py-3 premium-gradient-red-card">
+                        <p className="text-[10px] uppercase tracking-[0.4em] font-bold text-white">Current Wager</p>
                         <p className="text-base font-bold tabular-nums text-white">{round.wager.toLocaleString()}</p>
                       </div>
                     ) : null}
@@ -1301,7 +1301,7 @@ export default function App() {
                         type="button"
                         onClick={hit}
                         disabled={round?.status !== 'player-turn'}
-                        className="rounded-2xl bg-gradient-to-r from-amber-700 via-yellow-400 to-amber-600 text-black font-black text-sm py-4 transition hover:brightness-110 active:scale-95 shadow-[0_4px_20px_rgba(245,158,11,0.25)] disabled:cursor-not-allowed disabled:opacity-30"
+                        className="rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-violet-950 via-violet-800 to-violet-950 text-white font-bold text-sm py-4 transition hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
                       >
                         Hit
                       </button>
